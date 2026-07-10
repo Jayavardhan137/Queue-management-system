@@ -29,7 +29,9 @@ export default function SuperAdminDashboard() {
     currentUser, 
     logout, 
     organizations, 
-    tokens, 
+    analytics,
+    fetchOrganizations,
+    fetchAnalytics,
     approveOrganization, 
     rejectOrganization, 
     suspendOrganization, 
@@ -46,6 +48,18 @@ export default function SuperAdminDashboard() {
     }
   }, [currentUser, router]);
 
+  useEffect(() => {
+    if (currentUser?.role === 'Super Admin') {
+      fetchOrganizations();
+      fetchAnalytics();
+      const interval = setInterval(() => {
+        fetchOrganizations();
+        fetchAnalytics();
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser]);
+
   if (!currentUser || currentUser.role !== 'Super Admin') {
     return (
       <div className="min-h-screen bg-[#020205] text-white flex items-center justify-center">
@@ -55,31 +69,31 @@ export default function SuperAdminDashboard() {
   }
 
   // Dashboard Analytics calculations
-  const totalOrgs = organizations.length;
-  const pendingApprovals = organizations.filter(o => o.status === 'Pending').length;
-  const approvedOrgs = organizations.filter(o => o.status === 'Approved').length;
+  const totalOrgs = analytics?.totalOrgs ?? organizations.length;
+  const pendingApprovals = organizations.filter(o => o.status === 'Pending Verification').length;
+  const approvedOrgs = organizations.filter(o => o.status === 'Active').length;
   const rejectedOrgs = organizations.filter(o => o.status === 'Rejected').length;
   const suspendedOrgs = organizations.filter(o => o.status === 'Suspended').length;
 
-  // Active Organizations: Approved organizations that are not suspended
-  const activeOrgsCount = organizations.filter(o => o.status === 'Approved').length;
+  // Active Organizations
+  const activeOrgsCount = analytics?.activeOrgs ?? approvedOrgs;
 
-  // Customers (unique phone numbers)
-  const totalCustomers = Array.from(new Set(tokens.map(t => t.customerPhone))).length;
-  const totalTokensGenerated = tokens.length;
+  // Platform-wide stats (from analytics endpoint, since a Super Admin can't see individual tokens)
+  const totalCustomers = analytics?.dailyCustomers ?? 0;
+  const totalTokensGenerated = analytics?.totalTokens ?? 0;
 
   // Monthly Recurring Revenue simulation
   const monthlyRecurringRevenue = (approvedOrgs * 79) + (suspendedOrgs * 29);
   const projectedAnnualRevenue = monthlyRecurringRevenue * 12;
 
   // Pending approval list
-  const pendingList = organizations.filter(o => o.status === 'Pending');
+  const pendingList = organizations.filter(o => o.status === 'Pending Verification');
 
   // Tenant directory based on directory filters
   const directoryList = organizations.filter(o => {
     if (activeTab === 'All') return true;
-    if (activeTab === 'Pending') return o.status === 'Pending';
-    if (activeTab === 'Approved') return o.status === 'Approved';
+    if (activeTab === 'Pending') return o.status === 'Pending Verification';
+    if (activeTab === 'Approved') return o.status === 'Active';
     if (activeTab === 'Rejected') return o.status === 'Rejected';
     if (activeTab === 'Suspended') return o.status === 'Suspended';
     return true;
@@ -87,9 +101,9 @@ export default function SuperAdminDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Approved':
-        return <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Approved</span>;
-      case 'Pending':
+      case 'Active':
+        return <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>;
+      case 'Pending Verification':
         return <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse">Pending Review</span>;
       case 'Rejected':
         return <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">Rejected</span>;
@@ -377,7 +391,7 @@ export default function SuperAdminDashboard() {
                         <td className="p-4">{getStatusBadge(org.status)}</td>
                         <td className="p-4 text-right">
                           <div className="flex justify-end gap-2">
-                            {org.status === 'Approved' && (
+                            {org.status === 'Active' && (
                               <button
                                 onClick={() => suspendOrganization(org.id)}
                                 className="py-1.5 px-3 text-xs font-bold rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 flex items-center gap-1 cursor-pointer transition-all"
@@ -454,7 +468,7 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div className="flex gap-3 justify-end pt-4 border-t border-white/5">
-                {selectedOrgForDoc.status === 'Pending' && (
+                {selectedOrgForDoc.status === 'Pending Verification' && (
                   <>
                     <button
                       onClick={() => {

@@ -68,12 +68,33 @@ export interface BusinessSettings {
   isPaused: boolean;
 }
 
+export interface PublicOrgInfo {
+  id: string;
+  name: string;
+  businessType: string;
+  address: string;
+  logoUrl?: string;
+  status: OrgStatus;
+  isQueuePaused: boolean;
+  currentToken: string;
+  waitingCount: number;
+}
+
+export interface PlatformAnalytics {
+  totalOrgs: number;
+  activeOrgs: number;
+  pendingOrgs: number;
+  totalTokens: number;
+  dailyCustomers: number;
+}
+
 interface QueueContextType {
   currentUser: User | null;
   loading: boolean;
   error: string | null;
 
   organizations: Organization[];
+  analytics: PlatformAnalytics | null;
   tokens: QueueToken[];
   dashboard: DashboardMetrics | null;
   settings: Record<string, BusinessSettings>;
@@ -87,6 +108,7 @@ interface QueueContextType {
   }) => Promise<{ ok: boolean; message?: string; organization?: any }>;
 
   fetchOrganizations: () => Promise<void>;
+  fetchAnalytics: () => Promise<void>;
   approveOrganization: (id: string) => Promise<void>;
   rejectOrganization: (id: string) => Promise<void>;
   suspendOrganization: (id: string) => Promise<void>;
@@ -103,9 +125,9 @@ interface QueueContextType {
   updateBusinessProfile: (orgId: string, name: string, phone: string, address: string, logoUrl?: string) => Promise<void>;
   updateSubscription: (orgId: string, subscriptionPlan: string, paymentStatus: string, trialStatus: string, subscriptionExpiry: string) => Promise<void>;
 
-  bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string) => Promise<QueueToken | null>;
+  bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string) => Promise<{ ok: boolean; token?: QueueToken; message?: string }>;
   trackToken: (tokenId: string) => Promise<any>;
-  fetchPublicOrgInfo: (orgId: string) => Promise<any>;
+  fetchPublicOrgInfo: (orgId: string) => Promise<PublicOrgInfo | null>;
   searchTokens: (query: string) => Promise<(QueueToken & { organizationName: string })[]>;
 }
 
@@ -152,6 +174,7 @@ const mapToken = (t: any): QueueToken => ({
 export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [analytics, setAnalytics] = useState<PlatformAnalytics | null>(null);
   const [tokens, setTokens] = useState<QueueToken[]>([]);
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
   const [settings, setSettings] = useState<Record<string, BusinessSettings>>({});
@@ -269,6 +292,22 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setError(null);
       const data = await apiFetch('/api/superadmin/organizations');
       setOrganizations(data.map(mapOrg));
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      setError(null);
+      const data = await apiFetch('/api/superadmin/analytics');
+      setAnalytics({
+        totalOrgs: parseInt(data.total_orgs) || 0,
+        activeOrgs: parseInt(data.active_orgs) || 0,
+        pendingOrgs: parseInt(data.pending_orgs) || 0,
+        totalTokens: parseInt(data.total_tokens) || 0,
+        dailyCustomers: parseInt(data.daily_customers) || 0,
+      });
     } catch (e: any) {
       setError(e.message);
     }
@@ -411,10 +450,10 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         method: 'POST',
         body: JSON.stringify({ name, phone, email, purpose }),
       });
-      return mapToken(data);
+      return { ok: true, token: mapToken(data) };
     } catch (e: any) {
       setError(e.message);
-      return null;
+      return { ok: false, message: e.message };
     }
   };
 
@@ -460,6 +499,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         loading,
         error,
         organizations,
+        analytics,
         tokens,
         dashboard,
         settings,
@@ -467,6 +507,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         logout,
         registerOrganization,
         fetchOrganizations,
+        fetchAnalytics,
         approveOrganization,
         rejectOrganization,
         suspendOrganization,
@@ -483,6 +524,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateSubscription,
         bookToken,
         trackToken,
+        fetchPublicOrgInfo,
         searchTokens,
       }}
     >

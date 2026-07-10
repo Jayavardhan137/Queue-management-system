@@ -89,7 +89,7 @@ app.post('/api/auth/register', async (req, res) => {
         VALUES ($1, 'Business Registration Document', $2),
                ($1, 'Identity Proof', $3);
       `;
-      await client.query(docQuery, [newOrg.id, registrationDocUrl, identityProofUrl]);
+      await client.query(docQuery, [newOrg.id, registrationDocUrl || 'pending-upload', identityProofUrl || 'pending-upload']);
 
       // Create Settings
       await client.query(`

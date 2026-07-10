@@ -143,23 +143,25 @@ function RegisterForm() {
     setIsLoading(true);
 
     try {
-      // Create registered organization in context (defaults to Unpaid)
-      const newOrg = await registerOrganization({
+      // Create registered organization via the real backend
+      const result = await registerOrganization({
         name: formData.name,
         businessType: formData.businessType,
         ownerName: formData.ownerName,
         email: formData.email,
         phone: formData.phone,
-        address: formData.address,
-        logoUrl: '🏢',
-        subscriptionPlan: plan as any,
-        paymentStatus: 'Unpaid',
-        trialStatus: plan === 'Starter' ? 'None' : 'Active',
-        subscriptionExpiry: new Date(Date.now() + (plan === 'Starter' ? 30 : 14) * 24 * 60 * 60 * 1000).toISOString()
+        businessAddress: formData.address,
+        password: formData.password,
       });
 
+      if (!result.ok || !result.organization) {
+        setError(result.message || 'An error occurred during registration. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
       // Redirect immediately to payment checkout flow
-      router.push(`/payment?orgId=${newOrg.id}&plan=${plan}`);
+      router.push(`/payment?orgId=${result.organization.id}&plan=${plan}`);
     } catch (err) {
       setError('An error occurred during registration. Please try again.');
     } finally {
