@@ -383,6 +383,65 @@ app.patch('/api/organizations/:orgId/settings', authenticateToken, checkTenantAc
   }
 });
 
+// Get Full Token List For Org (Admin queue view - today's tokens)
+app.get('/api/organizations/:orgId/queue/tokens', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT * FROM queue_tokens
+      WHERE organization_id = $1 AND created_at >= CURRENT_DATE
+      ORDER BY sequence_number ASC;
+    `, [orgId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve queue tokens' });
+  }
+});
+
+// Recall / Re-notify a Customer
+app.post('/api/organizations/:orgId/queue/:tokenId/recall', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { tokenId } = req.params;
+  try {
+    const tokenRes = await pool.query('SELECT * FROM queue_tokens WHERE id = $1', [tokenId]);
+    const token = tokenRes.rows[0];
+    if (!token) return res.status(404).json({ error: 'Token not found' });
+
+    await logNotification(
+      token.organization_id, token.id, token.customer_phone,
+      `Re-calling Token ${token.token_number}: Please proceed to the service counter. Your turn is currently active!`,
+      'current_turn'
+    );
+    res.json({ message: 'Customer re-notified successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to recall customer' });
+  }
+});
+
+// Update Business Profile
+app.patch('/api/organizations/:orgId/profile', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  const { name, phone, businessAddress, logoUrl } = req.body;
+  try {
+    const query = `
+      UPDATE organizations
+      SET name = COALESCE($1, name),
+          phone = COALESCE($2, phone),
+          business_address = COALESCE($3, business_address),
+          logo_url = COALESCE($4, logo_url),
+          updated_at = NOW()
+      WHERE id = $5 RETURNING *;
+    `;
+    const result = await pool.query(query, [name, phone, businessAddress, logoUrl, orgId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update business profile' });
+  }
+});
+
 // ==========================================
 // CUSTOMER ENDPOINTS
 // ==========================================

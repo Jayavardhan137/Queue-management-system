@@ -47,3 +47,5 @@ backend/.env
 
 # Backend logs
 backend/*.log
+
+.env.local
