@@ -112,10 +112,20 @@ app.post('/api/auth/register', async (req, res) => {
 
       await client.query('COMMIT');
 
+      const payload = {
+        id: userResult.rows[0].id,
+        name: userResult.rows[0].name,
+        email: userResult.rows[0].email,
+        role: userResult.rows[0].role,
+        organizationId: newOrg.id
+      };
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+
       res.status(201).json({
         message: 'Registration successful. Pending verification by Super Admin.',
         organization: newOrg,
-        user: userResult.rows[0]
+        user: { ...userResult.rows[0], organizationId: newOrg.id },
+        token
       });
     } catch (err) {
     console.error(err);
@@ -419,6 +429,29 @@ app.post('/api/organizations/:orgId/queue/:tokenId/recall', authenticateToken, c
   }
 });
 
+// Update Subscription (after simulated payment)
+app.patch('/api/organizations/:orgId/subscription', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  const { subscriptionPlan, paymentStatus, trialStatus, subscriptionExpiry } = req.body;
+  try {
+    const query = `
+      UPDATE organizations
+      SET subscription_plan = COALESCE($1, subscription_plan),
+          payment_status = COALESCE($2, payment_status),
+          trial_status = COALESCE($3, trial_status),
+          subscription_expiry = COALESCE($4, subscription_expiry),
+          updated_at = NOW()
+      WHERE id = $5 RETURNING *;
+    `;
+    const result = await pool.query(query, [subscriptionPlan, paymentStatus, trialStatus, subscriptionExpiry, orgId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update subscription' });
+  }
+});
+
 // Get Own Organization Profile (Org Admin)
 app.get('/api/organizations/:orgId/profile', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
@@ -458,6 +491,42 @@ app.patch('/api/organizations/:orgId/profile', authenticateToken, checkTenantAcc
 // ==========================================
 // CUSTOMER ENDPOINTS
 // ==========================================
+
+// Get Public Organization Info + Live Queue Status (QR landing page)
+app.get('/api/public/organizations/:orgId', async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const orgRes = await pool.query(
+      'SELECT id, name, business_type, business_address, logo_url, status FROM organizations WHERE id = $1',
+      [orgId]
+    );
+    if (orgRes.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
+    const org = orgRes.rows[0];
+
+    const settingsRes = await pool.query('SELECT is_queue_paused FROM business_settings WHERE organization_id = $1', [orgId]);
+    const statsRes = await pool.query(`
+      SELECT
+        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_token,
+        COUNT(CASE WHEN status = 'Waiting' THEN 1 END) as waiting
+      FROM queue_tokens WHERE organization_id = $1 AND created_at >= CURRENT_DATE;
+    `, [orgId]);
+
+    res.json({
+      id: org.id,
+      name: org.name,
+      businessType: org.business_type,
+      address: org.business_address,
+      logoUrl: org.logo_url,
+      status: org.status,
+      isQueuePaused: settingsRes.rows[0]?.is_queue_paused || false,
+      currentToken: statsRes.rows[0]?.current_token || 'None',
+      waitingCount: parseInt(statsRes.rows[0]?.waiting || 0),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve organization info' });
+  }
+});
 
 // Book Token (Customer scan QR landing page)
 app.post('/api/public/queue/:orgId/book', async (req, res) => {

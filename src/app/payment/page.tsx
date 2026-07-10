@@ -44,7 +44,7 @@ function PaymentForm() {
   const plan = searchParams.get('plan') || 'Starter';
   const planDetails = PLAN_INFO[plan] || PLAN_INFO.Starter;
 
-  const { organizations, updateSubscription } = useQueue();
+  const { fetchOwnOrgProfile, updateSubscription } = useQueue();
   const [orgName, setOrgName] = useState('Your Business');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,13 +58,14 @@ function PaymentForm() {
 
   useEffect(() => {
     if (orgId) {
-      const org = organizations.find(o => o.id === orgId);
-      if (org) {
-        setOrgName(org.name);
-        setCardName(org.ownerName);
-      }
+      fetchOwnOrgProfile(orgId).then(org => {
+        if (org) {
+          setOrgName(org.name);
+          setCardName(org.ownerName);
+        }
+      });
     }
-  }, [orgId, organizations]);
+  }, [orgId]);
 
   const handleSimulatePayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,15 +79,15 @@ function PaymentForm() {
     setIsLoading(true);
 
     // Simulate Stripe/Razorpay payment processing latency
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         const trialStatus = plan === 'Starter' ? 'None' : 'Active';
         // Calculate subscription expiry: 30 days + 14 days trial if applicable
         const days = plan === 'Starter' ? 30 : 44; 
         const expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
-        // Update organization payment status in context
-        updateSubscription(orgId, plan as any, 'Paid', trialStatus, expiryDate);
+        // Update organization payment status via the backend
+        await updateSubscription(orgId, plan, 'Paid', trialStatus, expiryDate);
         setPaymentSuccess(true);
 
         setTimeout(() => {

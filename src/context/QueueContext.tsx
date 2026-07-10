@@ -101,9 +101,11 @@ interface QueueContextType {
   toggleQueuePause: (orgId: string, currentlyPaused: boolean) => Promise<void>;
   updateAvgServiceTime: (orgId: string, minutes: number) => Promise<void>;
   updateBusinessProfile: (orgId: string, name: string, phone: string, address: string, logoUrl?: string) => Promise<void>;
+  updateSubscription: (orgId: string, subscriptionPlan: string, paymentStatus: string, trialStatus: string, subscriptionExpiry: string) => Promise<void>;
 
   bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string) => Promise<QueueToken | null>;
   trackToken: (tokenId: string) => Promise<any>;
+  fetchPublicOrgInfo: (orgId: string) => Promise<any>;
   searchTokens: (query: string) => Promise<(QueueToken & { organizationName: string })[]>;
 }
 
@@ -228,10 +230,36 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         method: 'POST',
         body: JSON.stringify(orgData),
       });
+      if (data.token && data.user) {
+        const user: User = {
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          role: data.user.role,
+          organizationId: data.user.organizationId,
+          token: data.token,
+        };
+        setCurrentUser(user);
+        localStorage.setItem('qflow_user', JSON.stringify(user));
+      }
       return { ok: true, message: data.message, organization: data.organization };
     } catch (e: any) {
       setError(e.message);
       return { ok: false, message: e.message };
+    }
+  };
+
+  const updateSubscription = async (
+    orgId: string, subscriptionPlan: string, paymentStatus: string, trialStatus: string, subscriptionExpiry: string
+  ) => {
+    try {
+      setError(null);
+      await apiFetch(`/api/organizations/${orgId}/subscription`, {
+        method: 'PATCH',
+        body: JSON.stringify({ subscriptionPlan, paymentStatus, trialStatus, subscriptionExpiry }),
+      });
+    } catch (e: any) {
+      setError(e.message);
     }
   };
 
@@ -400,6 +428,20 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const fetchPublicOrgInfo = async (orgId: string) => {
+    try {
+      setError(null);
+      // This is a public endpoint, so we call fetch directly (no auth header needed)
+      const res = await fetch(`${API_URL}/api/public/organizations/${orgId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load organization');
+      return data;
+    } catch (e: any) {
+      setError(e.message);
+      return null;
+    }
+  };
+
   const searchTokens = async (query: string) => {
     try {
       setError(null);
@@ -438,6 +480,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleQueuePause,
         updateAvgServiceTime,
         updateBusinessProfile,
+        updateSubscription,
         bookToken,
         trackToken,
         searchTokens,
