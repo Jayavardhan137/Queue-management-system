@@ -127,6 +127,11 @@ function RegisterForm() {
       setError('Please fill in all standard details.');
       return;
     }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+    if (!emailPattern.test(formData.email.trim())) {
+      setError('Please enter a valid email address (e.g. name@example.com).');
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;

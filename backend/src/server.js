@@ -67,6 +67,14 @@ app.post('/api/auth/register', async (req, res) => {
     registrationDocUrl, identityProofUrl
   } = req.body;
 
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!email || !emailPattern.test(email.trim())) {
+    return res.status(400).json({ error: 'Please provide a valid email address.' });
+  }
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  }
+
   try {
     const client = await pool.connect();
     try {
