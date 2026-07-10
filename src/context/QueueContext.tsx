@@ -93,6 +93,7 @@ interface QueueContextType {
   activateOrganization: (id: string) => Promise<void>;
 
   fetchDashboard: (orgId: string) => Promise<void>;
+  fetchOwnOrgProfile: (orgId: string) => Promise<Organization | null>;
   fetchTokens: (orgId: string) => Promise<void>;
   nextCustomer: (orgId: string) => Promise<void>;
   skipCustomer: (orgId: string) => Promise<void>;
@@ -278,6 +279,22 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const fetchOwnOrgProfile = async (orgId: string): Promise<Organization | null> => {
+    try {
+      setError(null);
+      const data = await apiFetch(`/api/organizations/${orgId}/profile`);
+      const org = mapOrg(data);
+      setOrganizations(prev => {
+        const others = prev.filter(o => o.id !== org.id);
+        return [...others, org];
+      });
+      return org;
+    } catch (e: any) {
+      setError(e.message);
+      return null;
+    }
+  };
+
   const fetchTokens = async (orgId: string) => {
     try {
       setError(null);
@@ -413,6 +430,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         suspendOrganization,
         activateOrganization,
         fetchDashboard,
+        fetchOwnOrgProfile,
         fetchTokens,
         nextCustomer,
         skipCustomer,
