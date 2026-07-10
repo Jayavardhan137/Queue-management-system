@@ -29,6 +29,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const {
     currentUser,
+    loading,
     logout,
     tokens,
     dashboard,
@@ -43,7 +44,6 @@ export default function AdminDashboard() {
     updateAvgServiceTime,
     updateBusinessProfile
   } = useQueue();
-
   const [activeTab, setActiveTab] = useState<'Live' | 'QR' | 'Reports' | 'Settings'>('Live');
 
   const [profileName, setProfileName] = useState('');
@@ -61,10 +61,10 @@ export default function AdminDashboard() {
 
   // Auth guard
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'Organization Admin' || !currentUser.organizationId) {
+    if (!loading && (!currentUser || currentUser.role !== 'Organization Admin' || !currentUser.organizationId)) {
       router.push('/login');
     }
-  }, [currentUser, router]);
+  }, [currentUser, loading, router]);
 
   // Load org profile (org list isn't fetched for this role by default, so we fetch just this org's data via dashboard/tokens)
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function AdminDashboard() {
     if (typeof window !== 'undefined') setSiteOrigin(window.location.origin);
   }, []);
 
-  if (!currentUser || currentUser.role !== 'Organization Admin' || !orgId) {
+  if (loading || !currentUser || currentUser.role !== 'Organization Admin' || !orgId) {
     return (
       <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">
         <p className="text-sm text-zinc-400">Loading console authentication...</p>

@@ -27,6 +27,7 @@ export default function SuperAdminDashboard() {
   const router = useRouter();
   const { 
     currentUser, 
+    loading,
     logout, 
     organizations, 
     analytics,
@@ -41,12 +42,12 @@ export default function SuperAdminDashboard() {
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Approved' | 'Rejected' | 'Suspended'>('All');
   const [selectedOrgForDoc, setSelectedOrgForDoc] = useState<Organization | null>(null);
 
-  // Auth Guard: redirects to /admin/login
+  // Auth Guard
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'Super Admin') {
-      router.push('/admin/login');
+    if (!loading && (!currentUser || currentUser.role !== 'Super Admin')) {
+      router.push('/login');
     }
-  }, [currentUser, router]);
+  }, [currentUser, loading, router]);
 
   useEffect(() => {
     if (currentUser?.role === 'Super Admin') {
@@ -60,7 +61,7 @@ export default function SuperAdminDashboard() {
     }
   }, [currentUser]);
 
-  if (!currentUser || currentUser.role !== 'Super Admin') {
+  if (loading || !currentUser || currentUser.role !== 'Super Admin') {
     return (
       <div className="min-h-screen bg-[#020205] text-white flex items-center justify-center">
         <p className="text-sm text-zinc-400 font-mono">Authenticating secure platform token...</p>
@@ -148,7 +149,7 @@ export default function SuperAdminDashboard() {
           <button 
             onClick={() => {
               logout();
-              router.push('/admin/login');
+              router.push('/login');
             }}
             className="w-full py-2 px-3 text-xs font-semibold rounded-xl border border-white/10 hover:bg-white/5 text-rose-400 hover:text-rose-300 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >

@@ -436,7 +436,7 @@ export default function Home() {
 
           <div className="border-t border-white/5 pt-6 flex justify-between items-center text-[10px] text-zinc-500">
             <span>&copy; {new Date().getFullYear()} QueueFlow AI. All rights reserved.</span>
-            <Link href="/admin/login" className="hover:text-white transition-colors">Super Admin Login</Link>
+            <Link href="/login" className="hover:text-white transition-colors">Super Admin Login</Link>
           </div>
         </section>
 
