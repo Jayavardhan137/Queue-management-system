@@ -145,10 +145,10 @@ export default function Home() {
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-    const results = searchTokens(searchQuery);
+    const results = await searchTokens(searchQuery);
     setSearchResults(results);
     setSearchAttempted(true);
   };
