@@ -14,10 +14,10 @@ export default function QueueSearchGateway() {
   const [results, setResults] = useState<any[]>([]);
   const [searched, setSearched] = useState(false);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-    const tokens = searchTokens(query);
+    const tokens = await searchTokens(query);
     setResults(tokens);
     setSearched(true);
   };
