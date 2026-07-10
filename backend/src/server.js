@@ -8,18 +8,13 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
-const { Pool } = require('pg');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'queueflow_secret_key_1298471923';
 
 // Database Pool Connection (PostgreSQL)
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
-
+const pool = require("./config/db");
 
 app.use(cors());
 app.use(express.json());
@@ -123,12 +118,14 @@ app.post('/api/auth/register', async (req, res) => {
         user: userResult.rows[0]
       });
     } catch (err) {
+    console.error(err);
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
   } catch (err) {
+    console.error(err);
     console.error(err);
     res.status(500).json({ error: 'Internal server error during registration' });
   }
@@ -185,6 +182,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    console.error(err);
     res.status(500).json({ error: 'Internal server error during login' });
   }
 });
@@ -205,6 +203,7 @@ app.get('/api/superadmin/organizations', authenticateToken, authorizeRoles('Supe
     const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to retrieve organizations' });
   }
 });
@@ -220,6 +219,7 @@ app.patch('/api/superadmin/organizations/:orgId/status', authenticateToken, auth
     if (result.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to update organization status' });
   }
 });
@@ -239,6 +239,7 @@ app.get('/api/superadmin/analytics', authenticateToken, authorizeRoles('Super Ad
     const statsResult = await pool.query(statsQuery);
     res.json(statsResult.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to retrieve super admin analytics' });
   }
 });
@@ -281,6 +282,7 @@ app.get('/api/organizations/:orgId/dashboard', authenticateToken, checkTenantAcc
       isQueuePaused: settings ? settings.is_queue_paused : false
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to retrieve dashboard metrics' });
   }
 });
@@ -326,12 +328,14 @@ app.post('/api/organizations/:orgId/queue/next', authenticateToken, checkTenantA
       await client.query('COMMIT');
       res.json({ message: 'Queue updated successfully', nextToken: nextToken || null });
     } catch (err) {
+    console.error(err);
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to advance queue' });
   }
 });
@@ -353,6 +357,7 @@ app.post('/api/organizations/:orgId/queue/skip', authenticateToken, checkTenantA
 
     res.json({ message: 'Token skipped successfully', skippedToken: updateResult.rows[0] || null });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to skip customer' });
   }
 });
@@ -373,6 +378,7 @@ app.patch('/api/organizations/:orgId/settings', authenticateToken, checkTenantAc
     const result = await pool.query(query, [isQueuePaused, avgServiceTimeMinutes, orgId]);
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to update business settings' });
   }
 });
@@ -418,12 +424,14 @@ app.post('/api/public/queue/:orgId/book', async (req, res) => {
       await client.query('COMMIT');
       res.status(201).json(newToken);
     } catch (err) {
+    console.error(err);
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
   } catch (err) {
+    console.error(err);
     console.error(err);
     res.status(500).json({ error: 'Failed to generate token' });
   }
@@ -466,6 +474,7 @@ app.get('/api/public/tokens/:tokenId/track', async (req, res) => {
       estimatedWaitMinutes: token.status === 'Waiting' ? (aheadCount + 1) * serviceTime : 0
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to track token details' });
   }
 });
@@ -486,6 +495,7 @@ app.get('/api/public/search', async (req, res) => {
 
     res.json(searchRes.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Search failed' });
   }
 });
@@ -505,6 +515,7 @@ async function logNotification(orgId, tokenId, phone, message, type) {
       VALUES ($1, $2, $3, $4, $5, 'Sent', NOW());
     `, [orgId, tokenId, phone, message, type]);
   } catch (err) {
+    console.error(err);
     console.error('Failed to log SMS notification', err);
   }
 }
