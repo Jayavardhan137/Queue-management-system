@@ -65,6 +65,8 @@ function RegisterForm() {
 
   const [regDoc, setRegDoc] = useState<File | null>(null);
   const [idProof, setIdProof] = useState<File | null>(null);
+  const [regDocUrl, setRegDocUrl] = useState<string | null>(null);
+  const [idProofUrl, setIdProofUrl] = useState<string | null>(null);
   const [docProgress, setDocProgress] = useState(0);
   const [proofProgress, setProofProgress] = useState(0);
   
@@ -90,31 +92,68 @@ function RegisterForm() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileUpload = (type: 'reg' | 'id', file: File) => {
+  const CLOUDINARY_CLOUD_NAME = 'o0ctehiw';
+  const CLOUDINARY_UPLOAD_PRESET = 'queueflow_docs';
+
+  const uploadToCloudinary = (file: File, onProgress: (pct: number) => void): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const uploadData = new FormData();
+      uploadData.append('file', file);
+      uploadData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            resolve(data.secure_url);
+          } catch (e) {
+            reject(new Error('Unexpected response from upload service.'));
+          }
+        } else {
+          reject(new Error('Upload failed. Please try again.'));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Upload failed. Please check your internet connection.'));
+
+      xhr.send(uploadData);
+    });
+  };
+
+  const handleFileUpload = async (type: 'reg' | 'id', file: File) => {
     if (type === 'reg') {
       setRegDoc(file);
-      setDocProgress(10);
-      const interval = setInterval(() => {
-        setDocProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            return 100;
-          }
-          return prev + 30;
-        });
-      }, 200);
+      setRegDocUrl(null);
+      setDocProgress(5);
+      try {
+        const url = await uploadToCloudinary(file, setDocProgress);
+        setRegDocUrl(url);
+      } catch (err: any) {
+        setError(err.message || 'Failed to upload Business Registration document.');
+        setRegDoc(null);
+        setDocProgress(0);
+      }
     } else {
       setIdProof(file);
-      setProofProgress(10);
-      const interval = setInterval(() => {
-        setProofProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            return 100;
-          }
-          return prev + 30;
-        });
-      }, 200);
+      setIdProofUrl(null);
+      setProofProgress(5);
+      try {
+        const url = await uploadToCloudinary(file, setProofProgress);
+        setIdProofUrl(url);
+      } catch (err: any) {
+        setError(err.message || 'Failed to upload Identity Proof document.');
+        setIdProof(null);
+        setProofProgress(0);
+      }
     }
   };
 
@@ -141,8 +180,8 @@ function RegisterForm() {
       setError('Passwords do not match.');
       return;
     }
-    if (!regDoc || !idProof) {
-      setError('Please upload both the Business Registration and Identity documents.');
+    if (!regDoc || !idProof || !regDocUrl || !idProofUrl) {
+      setError('Please wait for both documents to finish uploading before continuing.');
       return;
     }
     if (!acceptedTerms) {
@@ -162,6 +201,8 @@ function RegisterForm() {
         phone: formData.phone,
         businessAddress: formData.address,
         password: formData.password,
+        registrationDocUrl: regDocUrl,
+        identityProofUrl: idProofUrl,
       });
 
       if (!result.ok || !result.organization) {
@@ -427,7 +468,7 @@ function RegisterForm() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (docProgress > 0 && docProgress < 100) || (proofProgress > 0 && proofProgress < 100)}
               className="w-full py-3.5 text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg hover:shadow-indigo-500/20 flex items-center justify-center gap-1.5 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isLoading ? (
