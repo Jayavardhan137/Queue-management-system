@@ -20,17 +20,16 @@ function SuccessScreen() {
   const searchParams = useSearchParams();
   const orgId = searchParams.get('orgId') || '';
 
-  const { organizations } = useQueue();
+  const { fetchOwnOrgProfile } = useQueue();
   const [org, setOrg] = useState<any>(null);
 
   useEffect(() => {
     if (orgId) {
-      const found = organizations.find(o => o.id === orgId);
-      if (found) {
-        setOrg(found);
-      }
+      fetchOwnOrgProfile(orgId).then(found => {
+        if (found) setOrg(found);
+      });
     }
-  }, [orgId, organizations]);
+  }, [orgId]);
 
   if (!org) {
     return (
@@ -108,10 +107,10 @@ function SuccessScreen() {
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
           <button 
-            onClick={() => router.push('/admin/login')}
+            onClick={() => router.push('/login')}
             className="py-3.5 px-6 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-center gap-1.5 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-lg hover:shadow-indigo-500/20"
           >
-            Go to Super Admin Portal <ArrowRight className="w-4 h-4" />
+            Go to Login <ArrowRight className="w-4 h-4" />
           </button>
           <Link 
             href="/"
