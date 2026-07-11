@@ -496,14 +496,14 @@ export default function AdminDashboard() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">Workspace Icon Emoji</label>
                     <select value={profileLogo} onChange={e => setProfileLogo(e.target.value)} className="w-full p-3 premium-input text-sm text-white bg-[#121212] border-white/10">
-                      <option value="🏥">🏥 Hospital</option>
-                      <option value="💼">💼 Bank</option>
-                      <option value="💊">💊 Pharmacy</option>
-                      <option value="✂️">✂️ Salon</option>
-                      <option value="🛒">🛒 Supermarket</option>
-                      <option value="🏫">🏫 University</option>
-                      <option value="🍽️">🍽️ Restaurant</option>
-                      <option value="🛠️">🛠️ Service Center</option>
+                      <option value="🏥" className="bg-[#121212] text-white">🏥 Hospital</option>
+                      <option value="💼" className="bg-[#121212] text-white">💼 Bank</option>
+                      <option value="💊" className="bg-[#121212] text-white">💊 Pharmacy</option>
+                      <option value="✂️" className="bg-[#121212] text-white">✂️ Salon</option>
+                      <option value="🛒" className="bg-[#121212] text-white">🛒 Supermarket</option>
+                      <option value="🏫" className="bg-[#121212] text-white">🏫 University</option>
+                      <option value="🍽️" className="bg-[#121212] text-white">🍽️ Restaurant</option>
+                      <option value="🛠️" className="bg-[#121212] text-white">🛠️ Service Center</option>
                     </select>
                   </div>
                 </div>
