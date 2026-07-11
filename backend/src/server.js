@@ -7,6 +7,8 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const Razorpay = require('razorpay');
 
 
 const app = express();
@@ -15,6 +17,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'queueflow_secret_key_1298471923';
 
 // Database Pool Connection (PostgreSQL)
 const pool = require("./config/db");
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+// Plan pricing in paise (smallest currency unit), INR
+// Converted from displayed USD prices (Starter $29, Professional $79, Enterprise $299) at an approximate rate
+const PLAN_PRICING = {
+  Starter: 240000,      // ₹2400.00
+  Professional: 650000, // ₹6500.00
+  Enterprise: 2480000,  // ₹24800.00
+};
 
 app.use(cors());
 app.use(express.json());
@@ -438,6 +453,63 @@ app.post('/api/organizations/:orgId/queue/:tokenId/recall', authenticateToken, c
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to recall customer' });
+  }
+});
+
+// Create Razorpay Order (called when user reaches payment page)
+app.post('/api/payment/create-order', authenticateToken, async (req, res) => {
+  const { plan } = req.body;
+  const amount = PLAN_PRICING[plan];
+
+  if (amount === undefined) {
+    return res.status(400).json({ error: 'Invalid plan selected.' });
+  }
+
+  try {
+    const order = await razorpay.orders.create({
+      amount,
+      currency: 'INR',
+      receipt: `receipt_${req.user.organizationId}_${Date.now()}`,
+      notes: { organizationId: req.user.organizationId, plan },
+    });
+    res.json({ orderId: order.id, amount: order.amount, currency: order.currency, keyId: process.env.RAZORPAY_KEY_ID });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create payment order.' });
+  }
+});
+
+// Verify Razorpay Payment Signature and Activate Subscription
+app.post('/api/payment/verify', authenticateToken, async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan } = req.body;
+  const orgId = req.user.organizationId;
+
+  try {
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Payment verification failed. Signature mismatch.' });
+    }
+
+    const trialStatus = plan === 'Starter' ? 'None' : 'Active';
+    const days = plan === 'Starter' ? 30 : 44;
+    const expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+    const result = await pool.query(
+      `UPDATE organizations
+       SET subscription_plan = $1, payment_status = 'Paid', trial_status = $2, subscription_expiry = $3, updated_at = NOW()
+       WHERE id = $4 RETURNING *;`,
+      [plan, trialStatus, expiryDate, orgId]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
+    res.json({ message: 'Payment verified and subscription activated.', organization: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Payment verification failed.' });
   }
 });
 

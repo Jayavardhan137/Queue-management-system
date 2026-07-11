@@ -124,6 +124,8 @@ interface QueueContextType {
   updateAvgServiceTime: (orgId: string, minutes: number) => Promise<void>;
   updateBusinessProfile: (orgId: string, name: string, phone: string, address: string, logoUrl?: string) => Promise<void>;
   updateSubscription: (orgId: string, subscriptionPlan: string, paymentStatus: string, trialStatus: string, subscriptionExpiry: string) => Promise<void>;
+  createPaymentOrder: (plan: string) => Promise<{ ok: boolean; orderId?: string; amount?: number; currency?: string; keyId?: string; message?: string }>;
+  verifyPayment: (razorpayOrderId: string, razorpayPaymentId: string, razorpaySignature: string, plan: string) => Promise<{ ok: boolean; message?: string }>;
 
   bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string) => Promise<{ ok: boolean; token?: QueueToken; message?: string }>;
   trackToken: (tokenId: string) => Promise<any>;
@@ -266,6 +268,39 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         localStorage.setItem('qflow_user', JSON.stringify(user));
       }
       return { ok: true, message: data.message, organization: data.organization };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
+  const createPaymentOrder = async (plan: string) => {
+    try {
+      setError(null);
+      const data = await apiFetch('/api/payment/create-order', {
+        method: 'POST',
+        body: JSON.stringify({ plan }),
+      });
+      return { ok: true, orderId: data.orderId, amount: data.amount, currency: data.currency, keyId: data.keyId };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
+  const verifyPayment = async (razorpayOrderId: string, razorpayPaymentId: string, razorpaySignature: string, plan: string) => {
+    try {
+      setError(null);
+      await apiFetch('/api/payment/verify', {
+        method: 'POST',
+        body: JSON.stringify({
+          razorpay_order_id: razorpayOrderId,
+          razorpay_payment_id: razorpayPaymentId,
+          razorpay_signature: razorpaySignature,
+          plan,
+        }),
+      });
+      return { ok: true };
     } catch (e: any) {
       setError(e.message);
       return { ok: false, message: e.message };
@@ -522,6 +557,8 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateAvgServiceTime,
         updateBusinessProfile,
         updateSubscription,
+        createPaymentOrder,
+        verifyPayment,
         bookToken,
         trackToken,
         fetchPublicOrgInfo,
