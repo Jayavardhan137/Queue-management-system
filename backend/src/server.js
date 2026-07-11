@@ -469,7 +469,7 @@ app.post('/api/payment/create-order', authenticateToken, async (req, res) => {
     const order = await razorpay.orders.create({
       amount,
       currency: 'INR',
-      receipt: `receipt_${req.user.organizationId}_${Date.now()}`,
+      receipt: `rcpt_${Date.now()}`,
       notes: { organizationId: req.user.organizationId, plan },
     });
     res.json({ orderId: order.id, amount: order.amount, currency: order.currency, keyId: process.env.RAZORPAY_KEY_ID });
