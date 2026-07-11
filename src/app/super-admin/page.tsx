@@ -32,6 +32,7 @@ export default function SuperAdminDashboard() {
     organizations, 
     analytics,
     fetchOrganizations,
+    fetchOrgDocuments,
     fetchAnalytics,
     approveOrganization, 
     rejectOrganization, 
@@ -41,6 +42,8 @@ export default function SuperAdminDashboard() {
 
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Approved' | 'Rejected' | 'Suspended'>('All');
   const [selectedOrgForDoc, setSelectedOrgForDoc] = useState<Organization | null>(null);
+  const [orgDocuments, setOrgDocuments] = useState<{ documentType: string; fileUrl: string }[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
   // Auth Guard
   useEffect(() => {
@@ -60,6 +63,17 @@ export default function SuperAdminDashboard() {
       return () => clearInterval(interval);
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (selectedOrgForDoc) {
+      setDocsLoading(true);
+      setOrgDocuments([]);
+      fetchOrgDocuments(selectedOrgForDoc.id).then(docs => {
+        setOrgDocuments(docs);
+        setDocsLoading(false);
+      });
+    }
+  }, [selectedOrgForDoc]);
 
   if (loading || !currentUser || currentUser.role !== 'Super Admin') {
     return (
@@ -450,21 +464,81 @@ export default function SuperAdminDashboard() {
                 {/* Registration Paper */}
                 <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
                   <h5 className="text-xs font-bold uppercase tracking-wider text-indigo-400">Business License Paper</h5>
-                  <div className="h-44 rounded-xl border border-white/10 bg-black/60 flex flex-col justify-center items-center gap-2 p-4 text-center">
-                    <Building2 className="w-8 h-8 text-indigo-500" />
-                    <p className="text-xs font-semibold">Incorporation_Proof.pdf</p>
-                    <p className="text-[10px] text-zinc-500">Government Registry Stamp Checked</p>
-                  </div>
+                  {docsLoading ? (
+                    <div className="h-44 rounded-xl border border-white/10 bg-black/60 flex items-center justify-center">
+                      <p className="text-xs text-zinc-500">Loading document...</p>
+                    </div>
+                  ) : (() => {
+                    const doc = orgDocuments.find(d => d.documentType === 'Business Registration Document');
+                    if (!doc || !doc.fileUrl || doc.fileUrl === 'pending-upload') {
+                      return (
+                        <div className="h-44 rounded-xl border border-white/10 bg-black/60 flex flex-col justify-center items-center gap-2 p-4 text-center">
+                          <Building2 className="w-8 h-8 text-zinc-600" />
+                          <p className="text-xs text-zinc-500">No document uploaded</p>
+                        </div>
+                      );
+                    }
+                    const isPdf = doc.fileUrl.toLowerCase().endsWith('.pdf');
+                    return (
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="h-44 rounded-xl border border-white/10 bg-black/60 flex flex-col justify-center items-center gap-2 p-4 text-center overflow-hidden hover:border-indigo-500/40 transition-colors group relative"
+                      >
+                        {isPdf ? (
+                          <>
+                            <Building2 className="w-8 h-8 text-indigo-500" />
+                            <p className="text-xs font-semibold text-white">View PDF Document</p>
+                            <p className="text-[10px] text-zinc-500 group-hover:text-indigo-400">Opens in new tab</p>
+                          </>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={doc.fileUrl} alt="Business Registration Document" className="w-full h-full object-cover rounded-lg" />
+                        )}
+                      </a>
+                    );
+                  })()}
                 </div>
 
                 {/* Identity Proof */}
                 <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
                   <h5 className="text-xs font-bold uppercase tracking-wider text-indigo-400">Owner Identity Proof</h5>
-                  <div className="h-44 rounded-xl border border-white/10 bg-black/60 flex flex-col justify-center items-center gap-2 p-4 text-center">
-                    <Users className="w-8 h-8 text-indigo-500" />
-                    <p className="text-xs font-semibold">Owner_Passport_ID.jpg</p>
-                    <p className="text-[10px] text-zinc-500">Photo matching registered owner</p>
-                  </div>
+                  {docsLoading ? (
+                    <div className="h-44 rounded-xl border border-white/10 bg-black/60 flex items-center justify-center">
+                      <p className="text-xs text-zinc-500">Loading document...</p>
+                    </div>
+                  ) : (() => {
+                    const doc = orgDocuments.find(d => d.documentType === 'Identity Proof');
+                    if (!doc || !doc.fileUrl || doc.fileUrl === 'pending-upload') {
+                      return (
+                        <div className="h-44 rounded-xl border border-white/10 bg-black/60 flex flex-col justify-center items-center gap-2 p-4 text-center">
+                          <Users className="w-8 h-8 text-zinc-600" />
+                          <p className="text-xs text-zinc-500">No document uploaded</p>
+                        </div>
+                      );
+                    }
+                    const isPdf = doc.fileUrl.toLowerCase().endsWith('.pdf');
+                    return (
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="h-44 rounded-xl border border-white/10 bg-black/60 flex flex-col justify-center items-center gap-2 p-4 text-center overflow-hidden hover:border-indigo-500/40 transition-colors group relative"
+                      >
+                        {isPdf ? (
+                          <>
+                            <Users className="w-8 h-8 text-indigo-500" />
+                            <p className="text-xs font-semibold text-white">View PDF Document</p>
+                            <p className="text-[10px] text-zinc-500 group-hover:text-indigo-400">Opens in new tab</p>
+                          </>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={doc.fileUrl} alt="Owner Identity Proof" className="w-full h-full object-cover rounded-lg" />
+                        )}
+                      </a>
+                    );
+                  })()}
                 </div>
               </div>
 

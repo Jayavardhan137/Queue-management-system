@@ -108,6 +108,7 @@ interface QueueContextType {
   }) => Promise<{ ok: boolean; message?: string; organization?: any }>;
 
   fetchOrganizations: () => Promise<void>;
+  fetchOrgDocuments: (orgId: string) => Promise<{ documentType: string; fileUrl: string }[]>;
   fetchAnalytics: () => Promise<void>;
   approveOrganization: (id: string) => Promise<void>;
   rejectOrganization: (id: string) => Promise<void>;
@@ -332,6 +333,17 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const fetchOrgDocuments = async (orgId: string) => {
+    try {
+      setError(null);
+      const data = await apiFetch(`/api/superadmin/organizations/${orgId}/documents`);
+      return data.map((d: any) => ({ documentType: d.document_type, fileUrl: d.file_url }));
+    } catch (e: any) {
+      setError(e.message);
+      return [];
+    }
+  };
+
   const fetchAnalytics = async () => {
     try {
       setError(null);
@@ -542,6 +554,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         logout,
         registerOrganization,
         fetchOrganizations,
+        fetchOrgDocuments,
         fetchAnalytics,
         approveOrganization,
         rejectOrganization,

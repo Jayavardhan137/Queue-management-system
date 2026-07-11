@@ -245,6 +245,21 @@ app.get('/api/superadmin/organizations', authenticateToken, authorizeRoles('Supe
   }
 });
 
+// Get Organization's Uploaded Verification Documents
+app.get('/api/superadmin/organizations/:orgId/documents', authenticateToken, authorizeRoles('Super Admin'), async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT document_type, file_url, uploaded_at FROM organization_documents WHERE organization_id = $1',
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve documents' });
+  }
+});
+
 // Approve/Update Org Status
 app.patch('/api/superadmin/organizations/:orgId/status', authenticateToken, authorizeRoles('Super Admin'), async (req, res) => {
   const { orgId } = req.params;
