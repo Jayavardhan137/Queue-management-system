@@ -113,6 +113,11 @@ export default function QueuePortal() {
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone) return;
+    const digitsOnly = phone.replace(/[^0-9]/g, '');
+    if (digitsOnly.length < 10) {
+      setBookingError('Please enter a valid phone number (at least 10 digits).');
+      return;
+    }
     setIsBooking(true);
     setBookingError('');
 

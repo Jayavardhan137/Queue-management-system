@@ -71,6 +71,10 @@ app.post('/api/auth/register', async (req, res) => {
   if (!email || !emailPattern.test(email.trim())) {
     return res.status(400).json({ error: 'Please provide a valid email address.' });
   }
+  const phoneDigits = (phone || '').replace(/[^0-9]/g, '');
+  if (phoneDigits.length < 10) {
+    return res.status(400).json({ error: 'Please provide a valid phone number (at least 10 digits).' });
+  }
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
   }

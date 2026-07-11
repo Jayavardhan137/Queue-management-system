@@ -132,6 +132,11 @@ function RegisterForm() {
       setError('Please enter a valid email address (e.g. name@example.com).');
       return;
     }
+    const digitsOnly = formData.phone.replace(/[^0-9]/g, '');
+    if (digitsOnly.length < 10) {
+      setError('Please enter a valid phone number (at least 10 digits).');
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;
