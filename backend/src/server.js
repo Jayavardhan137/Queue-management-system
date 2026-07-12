@@ -470,14 +470,20 @@ app.get('/api/organizations/:orgId/dashboard', authenticateToken, checkTenantAcc
       isPaused = settings ? settings.is_queue_paused : false;
     }
 
+    // Use real historical service durations when enough data exists, instead of only the manually configured estimate
+    const prediction = await getSmartAvgServiceTime(orgId, deptId || null, avgServiceTime);
+
     res.json({
       todayQueue: parseInt(metrics.total_today || 0),
       currentToken: metrics.current_token || 'None',
       waitingCustomers: parseInt(metrics.waiting || 0),
       completedCustomers: parseInt(metrics.completed || 0),
       skippedCustomers: parseInt(metrics.skipped || 0),
-      avgWaitingTime: (metrics.waiting * avgServiceTime),
-      isQueuePaused: isPaused
+      avgWaitingTime: Math.round(metrics.waiting * prediction.minutes),
+      isQueuePaused: isPaused,
+      aiPredictedServiceTime: prediction.minutes,
+      isAiPredicted: prediction.isPredicted,
+      predictionSampleSize: prediction.sampleSize
     });
   } catch (err) {
     console.error(err);
@@ -515,9 +521,9 @@ app.post('/api/organizations/:orgId/queue/next', authenticateToken, checkTenantA
       const nextToken = nextTokenRes.rows[0];
 
       if (nextToken) {
-        // Update its status to Serving
+        // Update its status to Serving, and record exactly when service began (for smart wait-time predictions)
         await client.query(`
-          UPDATE queue_tokens SET status = 'Serving', updated_at = NOW() WHERE id = $1;
+          UPDATE queue_tokens SET status = 'Serving', served_at = NOW(), updated_at = NOW() WHERE id = $1;
         `, [nextToken.id]);
 
         // Trigger SMS notification for Current Serving Turn
@@ -1126,14 +1132,25 @@ app.get('/api/public/tokens/:tokenId/track', async (req, res) => {
     const stats = statsRes.rows[0];
 
     const aheadCount = parseInt(stats.ahead || 0);
-    const serviceTime = 15; // default wait estimation metric
-    
+
+    // Look up the organization/department's configured baseline, then let real historical data refine it
+    let fallbackServiceTime = 15;
+    if (token.department_id) {
+      const deptRes = await pool.query('SELECT avg_service_time_minutes FROM departments WHERE id = $1', [token.department_id]);
+      if (deptRes.rows[0]) fallbackServiceTime = deptRes.rows[0].avg_service_time_minutes;
+    } else {
+      const settingsRes = await pool.query('SELECT avg_service_time_minutes FROM business_settings WHERE organization_id = $1', [token.organization_id]);
+      if (settingsRes.rows[0]) fallbackServiceTime = settingsRes.rows[0].avg_service_time_minutes;
+    }
+    const prediction = await getSmartAvgServiceTime(token.organization_id, token.department_id || null, fallbackServiceTime);
+
     res.json({
       tokenNumber: token.token_number,
       status: token.status,
       currentServingToken: stats.current_serving || 'None',
       peopleAhead: token.status === 'Waiting' ? aheadCount : 0,
-      estimatedWaitMinutes: token.status === 'Waiting' ? (aheadCount + 1) * serviceTime : 0
+      estimatedWaitMinutes: token.status === 'Waiting' ? Math.round((aheadCount + 1) * prediction.minutes) : 0,
+      isAiPredicted: prediction.isPredicted
     });
   } catch (err) {
     console.error(err);
@@ -1168,6 +1185,43 @@ app.get('/api/public/search', async (req, res) => {
 
 // Helper: Log Notification in Database
 // Formats a raw phone number into E.164 format for Twilio (assumes India +91 if no country code given)
+// Predicts realistic per-customer service time using recent actual historical durations,
+// instead of relying purely on the admin's manually configured estimate.
+// Falls back to the configured default if there isn't enough historical data yet.
+async function getSmartAvgServiceTime(orgId, deptId, fallbackMinutes) {
+  try {
+    const deptFilter = deptId ? 'AND department_id = $2' : 'AND department_id IS NULL';
+    const params = deptId ? [orgId, deptId] : [orgId];
+
+    const result = await pool.query(`
+      SELECT EXTRACT(EPOCH FROM (updated_at - served_at)) / 60.0 as duration_minutes
+      FROM queue_tokens
+      WHERE organization_id = $1 ${deptFilter}
+        AND status = 'Completed'
+        AND served_at IS NOT NULL
+        AND updated_at > served_at
+        AND served_at >= NOW() - INTERVAL '30 days'
+      ORDER BY updated_at DESC
+      LIMIT 50;
+    `, params);
+
+    const durations = result.rows
+      .map(r => parseFloat(r.duration_minutes))
+      .filter(d => d > 0 && d < 120); // filter out unrealistic outliers (e.g. left overnight, data glitches)
+
+    // Require a minimum sample size before trusting the historical average over the manual setting
+    if (durations.length < 5) {
+      return { minutes: fallbackMinutes, isPredicted: false, sampleSize: durations.length };
+    }
+
+    const avg = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+    return { minutes: Math.round(avg * 10) / 10, isPredicted: true, sampleSize: durations.length };
+  } catch (err) {
+    console.error('Smart wait time prediction failed, using fallback:', err.message);
+    return { minutes: fallbackMinutes, isPredicted: false, sampleSize: 0 };
+  }
+}
+
 function formatPhoneForTwilio(phone) {
   const digits = (phone || '').replace(/[^0-9+]/g, '');
   if (digits.startsWith('+')) return digits;

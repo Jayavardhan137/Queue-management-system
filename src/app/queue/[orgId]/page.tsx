@@ -24,6 +24,7 @@ interface TrackData {
   currentServingToken: string;
   peopleAhead: number;
   estimatedWaitMinutes: number;
+  isAiPredicted?: boolean;
 }
 
 export default function QueuePortal() {
@@ -285,7 +286,14 @@ export default function QueuePortal() {
                     <p className="text-2xl font-bold mt-1 text-white">{trackData.peopleAhead}</p>
                   </div>
                   <div className="p-3 bg-white/2 rounded-xl border border-white/5">
-                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Estimated Wait</p>
+                    <div className="flex items-center justify-center gap-1">
+                      <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Estimated Wait</p>
+                      {trackData.isAiPredicted && (
+                        <span className="flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[7px] font-bold text-indigo-400 uppercase">
+                          <Sparkles className="w-2 h-2" /> AI
+                        </span>
+                      )}
+                    </div>
                     <p className="text-2xl font-bold mt-1 text-indigo-400">{trackData.estimatedWaitMinutes}m</p>
                   </div>
                 </div>

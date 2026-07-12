@@ -30,7 +30,8 @@ import {
   Layers,
   Plus,
   Trash2,
-  Edit2
+  Edit2,
+  Sparkles
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -418,9 +419,20 @@ export default function AdminDashboard() {
                 <p className="text-[10px] text-zinc-500">FIFO Line waiting</p>
               </div>
               <div className="p-5 rounded-3xl glass-panel border border-white/5 space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Est. Wait Time</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Est. Wait Time</p>
+                  {dashboard?.isAiPredicted && (
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[8px] font-bold text-indigo-400 uppercase tracking-wider">
+                      <Sparkles className="w-2.5 h-2.5" /> AI
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-4xl font-extrabold text-indigo-400">{estimatedWait}m</h3>
-                <p className="text-[10px] text-zinc-500">{settings[orgId]?.avgServiceTime ?? 15}m per customer settings</p>
+                <p className="text-[10px] text-zinc-500">
+                  {dashboard?.isAiPredicted
+                    ? `${dashboard?.aiPredictedServiceTime}m/customer (from ${dashboard?.predictionSampleSize} recent visits)`
+                    : `${settings[orgId]?.avgServiceTime ?? 15}m per customer settings`}
+                </p>
               </div>
               <div className="p-5 rounded-3xl glass-panel border border-white/5 space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Completed Today</p>

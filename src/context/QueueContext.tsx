@@ -60,6 +60,9 @@ export interface DashboardMetrics {
   skippedCustomers: number;
   avgWaitingTime: number;
   isQueuePaused: boolean;
+  aiPredictedServiceTime?: number;
+  isAiPredicted?: boolean;
+  predictionSampleSize?: number;
 }
 
 export interface BusinessSettings {
