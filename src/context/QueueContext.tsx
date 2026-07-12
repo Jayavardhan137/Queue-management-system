@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 // ==========================================
 export type UserRole = 'Super Admin' | 'Organization Admin' | 'Staff';
 export type OrgStatus = 'Pending Verification' | 'Active' | 'Suspended' | 'Rejected';
-export type TokenStatus = 'Waiting' | 'Serving' | 'Completed' | 'Skipped';
+export type TokenStatus = 'Waiting' | 'Serving' | 'Completed' | 'Skipped' | 'Cancelled';
 
 export interface User {
   id: string;
@@ -156,6 +156,7 @@ interface QueueContextType {
 
   bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string, deptId?: string) => Promise<{ ok: boolean; token?: QueueToken; message?: string }>;
   trackToken: (tokenId: string) => Promise<any>;
+  cancelToken: (tokenId: string) => Promise<{ ok: boolean; message?: string }>;
   fetchPublicOrgInfo: (orgId: string, deptId?: string) => Promise<PublicOrgInfo | null>;
   fetchPublicDepartments: (orgId: string) => Promise<PublicDepartment[]>;
   sendChatMessage: (orgId: string, message: string, history: { role: 'user' | 'assistant'; content: string }[]) => Promise<{ ok: boolean; reply?: string; message?: string }>;
@@ -651,6 +652,17 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const cancelToken = async (tokenId: string) => {
+    try {
+      setError(null);
+      const data = await apiFetch(`/api/public/tokens/${tokenId}/cancel`, { method: 'POST' });
+      return { ok: true, message: data.message };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
   const fetchPublicOrgInfo = async (orgId: string, deptId?: string) => {
     try {
       setError(null);
@@ -754,6 +766,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         verifyPayment,
         bookToken,
         trackToken,
+        cancelToken,
         fetchPublicOrgInfo,
         fetchPublicDepartments,
         sendChatMessage,

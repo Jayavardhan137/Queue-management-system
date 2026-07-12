@@ -1185,6 +1185,49 @@ app.post('/api/public/queue/:orgId/book', strictLimiter, async (req, res) => {
 });
 
 // Track Queue (Get live position)
+// Customer Cancels Their Own Waiting Token
+app.patch('/api/public/tokens/:tokenId/cancel', async (req, res) => {
+  const { tokenId } = req.params;
+  try {
+    const tokenRes = await pool.query('SELECT * FROM queue_tokens WHERE id = $1', [tokenId]);
+    const token = tokenRes.rows[0];
+
+    if (!token) return res.status(404).json({ error: 'Token not found.' });
+    if (token.status !== 'Waiting') {
+      return res.status(400).json({ error: `This token can no longer be cancelled (current status: ${token.status}).` });
+    }
+
+    await pool.query(
+      `UPDATE queue_tokens SET status = 'Cancelled', updated_at = NOW() WHERE id = $1`,
+      [tokenId]
+    );
+
+    res.json({ message: 'Token cancelled successfully.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to cancel token.' });
+  }
+});
+
+// Customer Cancels Their Own Token (only allowed while still Waiting)
+app.post('/api/public/tokens/:tokenId/cancel', async (req, res) => {
+  const { tokenId } = req.params;
+  try {
+    const result = await pool.query(
+      `UPDATE queue_tokens SET status = 'Cancelled', updated_at = NOW()
+       WHERE id = $1 AND status = 'Waiting' RETURNING *`,
+      [tokenId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'This token can no longer be cancelled (it may already be in service or completed).' });
+    }
+    res.json({ message: 'Token cancelled successfully.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to cancel token.' });
+  }
+});
+
 app.get('/api/public/tokens/:tokenId/track', async (req, res) => {
   const { tokenId } = req.params;
 

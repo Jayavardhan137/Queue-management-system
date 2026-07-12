@@ -34,7 +34,7 @@ export default function QueuePortal() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { bookToken, trackToken, fetchPublicOrgInfo, fetchPublicDepartments, sendChatMessage } = useQueue();
+  const { bookToken, trackToken, cancelToken, fetchPublicOrgInfo, fetchPublicDepartments, sendChatMessage } = useQueue();
 
   const orgId = params.orgId as string;
   const ticketIdParam = searchParams.get('ticketId');
@@ -66,6 +66,10 @@ export default function QueuePortal() {
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
+
+  // Token cancellation state
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   const refreshOrg = useCallback(async () => {
     const info = await fetchPublicOrgInfo(orgId, selectedDeptId || undefined);
@@ -222,6 +226,22 @@ export default function QueuePortal() {
     router.push(`/queue/${orgId}${selectedDeptId ? `?dept=${selectedDeptId}` : ''}`);
   };
 
+  const handleCancelToken = async () => {
+    if (!activeTicketId) return;
+    if (!confirm('Are you sure you want to cancel this token? This cannot be undone.')) return;
+
+    setCancelling(true);
+    setCancelError('');
+    const result = await cancelToken(activeTicketId);
+    setCancelling(false);
+
+    if (result.ok) {
+      handleClearTicket();
+    } else {
+      setCancelError(result.message || 'Failed to cancel your token. Please try again.');
+    }
+  };
+
   const handleChangeDepartment = () => {
     setActiveTicketId(null);
     setTrackData(null);
@@ -342,14 +362,32 @@ export default function QueuePortal() {
               </p>
             </div>
 
-            <div className="pt-4 text-center">
-              <button
-                onClick={handleClearTicket}
-                className="text-xs text-zinc-500 hover:text-white underline cursor-pointer"
-              >
-                Clear this ticket and book a new one
-              </button>
-            </div>
+            {cancelError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
+                {cancelError}
+              </div>
+            )}
+
+            {trackData.status === 'Waiting' ? (
+              <div className="pt-2 text-center">
+                <button
+                  onClick={handleCancelToken}
+                  disabled={cancelling}
+                  className="text-xs text-rose-400 hover:text-rose-300 underline cursor-pointer disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Cancel my token'}
+                </button>
+              </div>
+            ) : (
+              <div className="pt-4 text-center">
+                <button
+                  onClick={handleClearTicket}
+                  className="text-xs text-zinc-500 hover:text-white underline cursor-pointer"
+                >
+                  Clear this ticket and book a new one
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">

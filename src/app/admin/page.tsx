@@ -813,6 +813,7 @@ export default function AdminDashboard() {
                   <option value="Serving" className="bg-[#121212] text-white">Serving</option>
                   <option value="Completed" className="bg-[#121212] text-white">Completed</option>
                   <option value="Skipped" className="bg-[#121212] text-white">Skipped</option>
+                  <option value="Cancelled" className="bg-[#121212] text-white">Cancelled</option>
                 </select>
               </div>
               <button
@@ -864,6 +865,7 @@ export default function AdminDashboard() {
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                               token.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                               token.status === 'Skipped' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                              token.status === 'Cancelled' ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' :
                               token.status === 'Serving' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                               'bg-amber-500/10 text-amber-400 border-amber-500/20'
                             }`}>
