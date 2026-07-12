@@ -10,6 +10,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const { Resend } = require('resend');
+const twilio = require('twilio');
 
 
 const app = express();
@@ -26,6 +27,8 @@ const razorpay = new Razorpay({
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // Plan pricing in paise (smallest currency unit), INR
 // Converted from displayed USD prices (Starter $29, Professional $79, Enterprise $299) at an approximate rate
@@ -832,15 +835,33 @@ app.get('/api/public/search', async (req, res) => {
 // ==========================================
 
 // Helper: Log Notification in Database
+// Formats a raw phone number into E.164 format for Twilio (assumes India +91 if no country code given)
+function formatPhoneForTwilio(phone) {
+  const digits = (phone || '').replace(/[^0-9+]/g, '');
+  if (digits.startsWith('+')) return digits;
+  if (digits.length === 10) return `+91${digits}`;
+  return `+${digits}`;
+}
+
 async function logNotification(orgId, tokenId, phone, message, type) {
+  let status = 'Failed';
   try {
-    // Under production, trigger Twilio API request here
-    console.log(`[SMS Notification (${type}) to ${phone}]: "${message}"`);
-    
+    const toNumber = formatPhoneForTwilio(phone);
+    await twilioClient.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: toNumber,
+    });
+    status = 'Sent';
+  } catch (err) {
+    console.error('Failed to send SMS via Twilio:', err.message);
+  }
+
+  try {
     await pool.query(`
       INSERT INTO notifications (organization_id, token_id, customer_phone, message, notification_type, status, sent_at)
-      VALUES ($1, $2, $3, $4, $5, 'Sent', NOW());
-    `, [orgId, tokenId, phone, message, type]);
+      VALUES ($1, $2, $3, $4, $5, $6, NOW());
+    `, [orgId, tokenId, phone, message, type, status]);
   } catch (err) {
     console.error(err);
     console.error('Failed to log SMS notification', err);
