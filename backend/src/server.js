@@ -11,11 +11,17 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const { Resend } = require('resend');
 const twilio = require('twilio');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'queueflow_secret_key_1298471923';
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Database Pool Connection (PostgreSQL)
 const pool = require("./config/db");
@@ -38,8 +44,43 @@ const PLAN_PRICING = {
   Enterprise: 2480000,  // ₹24800.00
 };
 
-app.use(cors());
+app.use(helmet());
+
+// Only allow requests from your actual deployed frontend (and localhost for local dev)
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  'http://localhost:3000',
+];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow tools like curl/Postman (no origin header) and requests from allowed origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+}));
 app.use(express.json());
+
+// General rate limit: applies to all API routes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // 300 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+app.use('/api/', generalLimiter);
+
+// Strict rate limit: for sensitive endpoints prone to abuse (login, registration, password reset, booking)
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again in 15 minutes.' },
+});
 
 // ==========================================
 // MIDDLEWARES
@@ -83,7 +124,7 @@ const checkTenantAccess = (req, res, next) => {
 // ==========================================
 
 // Organization Registration
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', strictLimiter, async (req, res) => {
   const { 
     name, businessType, ownerName, email, phone, businessAddress, password,
     registrationDocUrl, identityProofUrl
@@ -176,7 +217,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // Login (All Roles)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', strictLimiter, async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -236,7 +277,7 @@ app.post('/api/auth/login', async (req, res) => {
 // ==========================================
 
 // Request Password Reset
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
   const { email } = req.body;
   try {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -283,7 +324,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 });
 
 // Reset Password using Token
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
   const { token, newPassword } = req.body;
 
   if (!newPassword || newPassword.length < 6) {
@@ -718,7 +759,7 @@ app.get('/api/public/organizations/:orgId', async (req, res) => {
 });
 
 // Book Token (Customer scan QR landing page)
-app.post('/api/public/queue/:orgId/book', async (req, res) => {
+app.post('/api/public/queue/:orgId/book', strictLimiter, async (req, res) => {
   const { orgId } = req.params;
   const { name, phone, email, purpose } = req.body;
 
