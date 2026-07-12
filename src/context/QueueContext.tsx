@@ -101,6 +101,8 @@ interface QueueContextType {
 
   login: (email: string, password: string) => Promise<{ ok: boolean; message?: string }>;
   logout: () => void;
+  forgotPassword: (email: string) => Promise<{ ok: boolean; message?: string }>;
+  resetPassword: (token: string, newPassword: string) => Promise<{ ok: boolean; message?: string }>;
 
   registerOrganization: (orgData: {
     name: string; businessType: string; ownerName: string; email: string; phone: string;
@@ -247,6 +249,34 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTokens([]);
     setDashboard(null);
     localStorage.removeItem('qflow_user');
+  };
+
+  const forgotPassword = async (email: string) => {
+    try {
+      setError(null);
+      const data = await apiFetch('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      return { ok: true, message: data.message };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
+  const resetPassword = async (token: string, newPassword: string) => {
+    try {
+      setError(null);
+      const data = await apiFetch('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      });
+      return { ok: true, message: data.message };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
   };
 
   const registerOrganization: QueueContextType['registerOrganization'] = async (orgData) => {
@@ -552,6 +582,8 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         settings,
         login,
         logout,
+        forgotPassword,
+        resetPassword,
         registerOrganization,
         fetchOrganizations,
         fetchOrgDocuments,

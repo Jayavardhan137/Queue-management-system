@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
+const { Resend } = require('resend');
 
 
 const app = express();
@@ -22,6 +23,9 @@ const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // Plan pricing in paise (smallest currency unit), INR
 // Converted from displayed USD prices (Starter $29, Professional $79, Enterprise $299) at an approximate rate
@@ -221,6 +225,89 @@ app.post('/api/auth/login', async (req, res) => {
     console.error(err);
     console.error(err);
     res.status(500).json({ error: 'Internal server error during login' });
+  }
+});
+
+// ==========================================
+// SUPER ADMIN ENDPOINTS
+// ==========================================
+
+// Request Password Reset
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+
+    // Always respond the same way whether or not the account exists,
+    // so attackers can't use this to discover which emails are registered.
+    if (!user) {
+      return res.json({ message: 'If an account exists for this email, a reset link has been sent.' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    await pool.query(
+      'UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE id = $3',
+      [resetToken, expiry, user.id]
+    );
+
+    const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+    await resend.emails.send({
+      from: 'QueueFlow AI <onboarding@resend.dev>',
+      to: user.email,
+      subject: 'Reset your QueueFlow AI password',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2>Reset your password</h2>
+          <p>Hi ${user.name},</p>
+          <p>We received a request to reset your QueueFlow AI password. Click the button below to choose a new one. This link expires in 1 hour.</p>
+          <p style="margin: 24px 0;">
+            <a href="${resetLink}" style="background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Reset Password</a>
+          </p>
+          <p>If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      `
+    });
+
+    res.json({ message: 'If an account exists for this email, a reset link has been sent.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to process password reset request.' });
+  }
+});
+
+// Reset Password using Token
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()',
+      [token]
+    );
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE id = $2',
+      [passwordHash, user.id]
+    );
+
+    res.json({ message: 'Password reset successful. You can now log in with your new password.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset password.' });
   }
 });
 
