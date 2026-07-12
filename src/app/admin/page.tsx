@@ -135,6 +135,29 @@ export default function AdminDashboard() {
     if (typeof window !== 'undefined') setSiteOrigin(window.location.origin);
   }, []);
 
+  const loadCustomerHistory = async (page: number = 1) => {
+    if (!orgId) return;
+    setHistoryLoading(true);
+    const result = await fetchCustomerHistory(orgId, {
+      search: historySearch || undefined,
+      startDate: historyStartDate || undefined,
+      endDate: historyEndDate || undefined,
+      status: historyStatus || undefined,
+      page,
+      limit: HISTORY_PAGE_SIZE,
+    });
+    setHistoryTokens(result.tokens);
+    setHistoryTotal(result.total);
+    setHistoryPage(result.page);
+    setHistoryLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'Customers' && orgId) {
+      loadCustomerHistory(1);
+    }
+  }, [activeTab]);
+
   if (loading || !currentUser || currentUser.role !== 'Organization Admin' || !orgId) {
     return (
       <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">
@@ -185,29 +208,6 @@ export default function AdminDashboard() {
   const qrTargetUrl = selectedDeptId
     ? `${siteOrigin}/queue/${orgId}?dept=${selectedDeptId}`
     : `${siteOrigin}/queue/${orgId}`;
-
-  const loadCustomerHistory = async (page: number = 1) => {
-    if (!orgId) return;
-    setHistoryLoading(true);
-    const result = await fetchCustomerHistory(orgId, {
-      search: historySearch || undefined,
-      startDate: historyStartDate || undefined,
-      endDate: historyEndDate || undefined,
-      status: historyStatus || undefined,
-      page,
-      limit: HISTORY_PAGE_SIZE,
-    });
-    setHistoryTokens(result.tokens);
-    setHistoryTotal(result.total);
-    setHistoryPage(result.page);
-    setHistoryLoading(false);
-  };
-
-  useEffect(() => {
-    if (activeTab === 'Customers' && orgId) {
-      loadCustomerHistory(1);
-    }
-  }, [activeTab]);
 
   const handleHistorySearch = (e: React.FormEvent) => {
     e.preventDefault();
