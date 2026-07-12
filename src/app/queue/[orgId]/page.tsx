@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useQueue, PublicOrgInfo } from '@/context/QueueContext';
+import { useQueue, PublicOrgInfo, PublicDepartment } from '@/context/QueueContext';
 import {
   Building2,
   User,
@@ -14,7 +14,8 @@ import {
   Bell,
   ArrowLeft,
   ChevronRight,
-  Info
+  Info,
+  Layers
 } from 'lucide-react';
 
 interface TrackData {
@@ -29,14 +30,20 @@ export default function QueuePortal() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { bookToken, trackToken, fetchPublicOrgInfo } = useQueue();
+  const { bookToken, trackToken, fetchPublicOrgInfo, fetchPublicDepartments } = useQueue();
 
   const orgId = params.orgId as string;
   const ticketIdParam = searchParams.get('ticketId');
+  const deptIdParam = searchParams.get('dept') || '';
 
   const [org, setOrg] = useState<PublicOrgInfo | null>(null);
   const [orgLoading, setOrgLoading] = useState(true);
   const [orgNotFound, setOrgNotFound] = useState(false);
+
+  // Department selection state
+  const [departments, setDepartments] = useState<PublicDepartment[]>([]);
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
+  const [selectedDeptId, setSelectedDeptId] = useState<string>(deptIdParam);
 
   // Form states
   const [name, setName] = useState('');
@@ -51,14 +58,14 @@ export default function QueuePortal() {
   const [trackData, setTrackData] = useState<TrackData | null>(null);
 
   const refreshOrg = useCallback(async () => {
-    const info = await fetchPublicOrgInfo(orgId);
+    const info = await fetchPublicOrgInfo(orgId, selectedDeptId || undefined);
     if (!info) {
       setOrgNotFound(true);
     } else {
       setOrg(info);
     }
     setOrgLoading(false);
-  }, [orgId]);
+  }, [orgId, selectedDeptId]);
 
   const refreshTracking = useCallback(async (ticketId: string) => {
     const data = await trackToken(ticketId);
@@ -67,15 +74,25 @@ export default function QueuePortal() {
     }
   }, []);
 
-  // Determine which ticket to track: URL param takes priority, else saved local ticket
+  const ticketStorageKey = `qflow_active_ticket_${orgId}${selectedDeptId ? `_${selectedDeptId}` : ''}`;
+
+  // Load the list of departments for this org (if any) once on mount
   useEffect(() => {
-    const idToUse = ticketIdParam || localStorage.getItem(`qflow_active_ticket_${orgId}`);
+    fetchPublicDepartments(orgId).then(depts => {
+      setDepartments(depts);
+      setDepartmentsLoaded(true);
+    });
+  }, [orgId]);
+
+  // Determine which ticket to track: URL param takes priority, else saved local ticket for this department
+  useEffect(() => {
+    const idToUse = ticketIdParam || localStorage.getItem(ticketStorageKey);
     if (idToUse) {
       setActiveTicketId(idToUse);
     }
-  }, [ticketIdParam, orgId]);
+  }, [ticketIdParam, ticketStorageKey]);
 
-  // Poll org info every 6s
+  // Poll org info every 6s (re-scoped whenever the selected department changes)
   useEffect(() => {
     refreshOrg();
     const interval = setInterval(refreshOrg, 6000);
@@ -110,6 +127,62 @@ export default function QueuePortal() {
     );
   }
 
+  // If this organization has departments and none has been chosen yet (no active ticket either), show a selection screen first
+  const needsDeptSelection = departmentsLoaded && departments.length > 0 && !selectedDeptId && !activeTicketId;
+
+  if (needsDeptSelection) {
+    return (
+      <div className="min-h-screen bg-[#030303] text-[#f5f5f7] flex flex-col justify-center py-12 px-6 relative">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-[400px] pointer-events-none rounded-full bg-indigo-500/10 blur-[130px]"></div>
+        <div className="max-w-md mx-auto w-full space-y-6 relative z-10">
+          <div className="flex justify-between items-center">
+            <Link href="/" className="text-xs text-zinc-400 hover:text-white flex items-center gap-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </Link>
+            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400">
+              <Sparkles className="w-3.5 h-3.5" /> QueueFlow Client
+            </div>
+          </div>
+
+          <div className="p-5 rounded-3xl glass-panel border border-white/5 flex items-center gap-3">
+            <span className="text-3xl p-1.5 bg-white/5 rounded-2xl border border-white/5">{org.logoUrl || '🏢'}</span>
+            <div>
+              <h3 className="font-extrabold text-white">{org.name}</h3>
+              <p className="text-xs text-zinc-500">{org.businessType} | {org.address}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="font-extrabold text-base flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-indigo-400" /> Choose a Section
+            </h4>
+            <p className="text-xs text-zinc-500">Select where you'd like to join the queue.</p>
+
+            <div className="space-y-2.5">
+              {departments.map(dept => (
+                <button
+                  key={dept.id}
+                  onClick={() => {
+                    setSelectedDeptId(dept.id);
+                    router.push(`/queue/${orgId}?dept=${dept.id}`);
+                  }}
+                  disabled={dept.isPaused}
+                  className="w-full p-4 rounded-2xl glass-panel border border-white/5 hover:border-indigo-500/40 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <div>
+                    <p className="font-bold text-white text-sm">{dept.name}</p>
+                    <p className="text-[10px] text-zinc-500">{dept.isPaused ? 'Not accepting tokens right now' : `${dept.waitingCount} waiting ahead`}</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-zinc-500" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone) return;
@@ -121,11 +194,11 @@ export default function QueuePortal() {
     setIsBooking(true);
     setBookingError('');
 
-    const result = await bookToken(orgId, name, phone, email, purpose);
+    const result = await bookToken(orgId, name, phone, email, purpose, selectedDeptId || undefined);
     if (result.ok && result.token) {
-      localStorage.setItem(`qflow_active_ticket_${orgId}`, result.token.id);
+      localStorage.setItem(ticketStorageKey, result.token.id);
       setActiveTicketId(result.token.id);
-      router.push(`/queue/${orgId}?ticketId=${result.token.id}`);
+      router.push(`/queue/${orgId}?ticketId=${result.token.id}${selectedDeptId ? `&dept=${selectedDeptId}` : ''}`);
     } else {
       setBookingError(result.message || 'Failed to book a token. Please try again.');
     }
@@ -133,9 +206,16 @@ export default function QueuePortal() {
   };
 
   const handleClearTicket = () => {
-    localStorage.removeItem(`qflow_active_ticket_${orgId}`);
+    localStorage.removeItem(ticketStorageKey);
     setActiveTicketId(null);
     setTrackData(null);
+    router.push(`/queue/${orgId}${selectedDeptId ? `?dept=${selectedDeptId}` : ''}`);
+  };
+
+  const handleChangeDepartment = () => {
+    setActiveTicketId(null);
+    setTrackData(null);
+    setSelectedDeptId('');
     router.push(`/queue/${orgId}`);
   };
 
@@ -162,6 +242,20 @@ export default function QueuePortal() {
             <p className="text-xs text-zinc-500">{org.businessType} | {org.address}</p>
           </div>
         </div>
+
+        {selectedDeptId && departments.length > 0 && (
+          <div className="flex items-center justify-between px-1 -mt-2">
+            <p className="text-[11px] text-zinc-500 flex items-center gap-1">
+              <Layers className="w-3 h-3 text-indigo-400" />
+              Section: <span className="text-white font-semibold">{departments.find(d => d.id === selectedDeptId)?.name || ''}</span>
+            </p>
+            {!activeTicketId && (
+              <button onClick={handleChangeDepartment} className="text-[11px] text-indigo-400 hover:underline cursor-pointer">
+                Change
+              </button>
+            )}
+          </div>
+        )}
 
         {activeTicketId && trackData ? (
           <div className="space-y-6">

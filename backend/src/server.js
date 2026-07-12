@@ -434,26 +434,41 @@ app.get('/api/superadmin/analytics', authenticateToken, authorizeRoles('Super Ad
 // Get Organization Active Queue Metrics
 app.get('/api/organizations/:orgId/dashboard', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
+  const { deptId } = req.query;
 
   try {
+    const deptFilter = deptId ? 'AND department_id = $2' : 'AND department_id IS NULL';
+    const params = deptId ? [orgId, deptId] : [orgId];
+
     const tokensQuery = `
       SELECT 
         COUNT(*) as total_today,
         COUNT(CASE WHEN status = 'Waiting' THEN 1 END) as waiting,
         COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed,
         COUNT(CASE WHEN status = 'Skipped' THEN 1 END) as skipped,
-        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_token
+        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 ${deptFilter} AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_token
       FROM queue_tokens 
-      WHERE organization_id = $1 AND created_at >= CURRENT_DATE;
+      WHERE organization_id = $1 ${deptFilter} AND created_at >= CURRENT_DATE;
     `;
-    
-    const settingsQuery = 'SELECT avg_service_time_minutes, is_queue_paused FROM business_settings WHERE organization_id = $1';
-    
-    const tokensResult = await pool.query(tokensQuery, [orgId]);
-    const settingsResult = await pool.query(settingsQuery, [orgId]);
 
+    const tokensResult = await pool.query(tokensQuery, params);
     const metrics = tokensResult.rows[0];
-    const settings = settingsResult.rows[0];
+
+    let avgServiceTime = 15;
+    let isPaused = false;
+
+    if (deptId) {
+      const deptRes = await pool.query('SELECT avg_service_time_minutes, is_paused FROM departments WHERE id = $1', [deptId]);
+      if (deptRes.rows[0]) {
+        avgServiceTime = deptRes.rows[0].avg_service_time_minutes;
+        isPaused = deptRes.rows[0].is_paused;
+      }
+    } else {
+      const settingsResult = await pool.query('SELECT avg_service_time_minutes, is_queue_paused FROM business_settings WHERE organization_id = $1', [orgId]);
+      const settings = settingsResult.rows[0];
+      avgServiceTime = settings ? settings.avg_service_time_minutes : 15;
+      isPaused = settings ? settings.is_queue_paused : false;
+    }
 
     res.json({
       todayQueue: parseInt(metrics.total_today || 0),
@@ -461,8 +476,8 @@ app.get('/api/organizations/:orgId/dashboard', authenticateToken, checkTenantAcc
       waitingCustomers: parseInt(metrics.waiting || 0),
       completedCustomers: parseInt(metrics.completed || 0),
       skippedCustomers: parseInt(metrics.skipped || 0),
-      avgWaitingTime: (metrics.waiting * (settings ? settings.avg_service_time_minutes : 15)),
-      isQueuePaused: settings ? settings.is_queue_paused : false
+      avgWaitingTime: (metrics.waiting * avgServiceTime),
+      isQueuePaused: isPaused
     });
   } catch (err) {
     console.error(err);
@@ -473,26 +488,30 @@ app.get('/api/organizations/:orgId/dashboard', authenticateToken, checkTenantAcc
 // Advance/Next Customer in Queue
 app.post('/api/organizations/:orgId/queue/next', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
+  const { deptId } = req.body;
 
   try {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
+      const deptFilter = deptId ? 'AND department_id = $2' : 'AND department_id IS NULL';
+      const baseParams = deptId ? [orgId, deptId] : [orgId];
+
       // 1. Current serving tokens should be marked Completed
       await client.query(`
         UPDATE queue_tokens 
         SET status = 'Completed', updated_at = NOW() 
-        WHERE organization_id = $1 AND status = 'Serving';
-      `, [orgId]);
+        WHERE organization_id = $1 ${deptFilter} AND status = 'Serving';
+      `, baseParams);
 
       // 2. Fetch the next Waiting token
       const nextTokenQuery = `
         SELECT * FROM queue_tokens 
-        WHERE organization_id = $1 AND status = 'Waiting' 
+        WHERE organization_id = $1 ${deptFilter} AND status = 'Waiting' 
         ORDER BY sequence_number ASC LIMIT 1;
       `;
-      const nextTokenRes = await client.query(nextTokenQuery, [orgId]);
+      const nextTokenRes = await client.query(nextTokenQuery, baseParams);
       const nextToken = nextTokenRes.rows[0];
 
       if (nextToken) {
@@ -505,7 +524,7 @@ app.post('/api/organizations/:orgId/queue/next', authenticateToken, checkTenantA
         await logNotification(orgId, nextToken.id, nextToken.customer_phone, `It is now your turn (Token ${nextToken.token_number}). Please proceed to the service counter.`, 'current_turn');
 
         // Alert next waiting customers (e.g. notify customer at position 2 and position 5)
-        await notifyApproachingCustomers(client, orgId);
+        await notifyApproachingCustomers(client, orgId, deptId);
       }
 
       await client.query('COMMIT');
@@ -526,17 +545,21 @@ app.post('/api/organizations/:orgId/queue/next', authenticateToken, checkTenantA
 // Skip Current Customer
 app.post('/api/organizations/:orgId/queue/skip', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
+  const { deptId } = req.body;
 
   try {
+    const deptFilter = deptId ? 'AND department_id = $2' : 'AND department_id IS NULL';
+    const params = deptId ? [orgId, deptId] : [orgId];
+
     const updateResult = await pool.query(`
       UPDATE queue_tokens 
       SET status = 'Skipped', updated_at = NOW() 
       WHERE id = (
         SELECT id FROM queue_tokens 
-        WHERE organization_id = $1 AND status = 'Serving' 
+        WHERE organization_id = $1 ${deptFilter} AND status = 'Serving' 
         ORDER BY sequence_number ASC LIMIT 1
       ) RETURNING *;
-    `, [orgId]);
+    `, params);
 
     res.json({ message: 'Token skipped successfully', skippedToken: updateResult.rows[0] || null });
   } catch (err) {
@@ -545,7 +568,7 @@ app.post('/api/organizations/:orgId/queue/skip', authenticateToken, checkTenantA
   }
 });
 
-// Update Settings (Pause/Resume Queue)
+// Update Settings (Pause/Resume Queue) - for the org-wide/no-department queue
 app.patch('/api/organizations/:orgId/settings', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
   const { isQueuePaused, avgServiceTimeMinutes } = req.body;
@@ -566,15 +589,19 @@ app.patch('/api/organizations/:orgId/settings', authenticateToken, checkTenantAc
   }
 });
 
-// Get Full Token List For Org (Admin queue view - today's tokens)
+// Get Full Token List For Org (Admin queue view - today's tokens, optionally scoped to a department)
 app.get('/api/organizations/:orgId/queue/tokens', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
+  const { deptId } = req.query;
   try {
+    const deptFilter = deptId ? 'AND department_id = $2' : 'AND department_id IS NULL';
+    const params = deptId ? [orgId, deptId] : [orgId];
+
     const result = await pool.query(`
       SELECT * FROM queue_tokens
-      WHERE organization_id = $1 AND created_at >= CURRENT_DATE
+      WHERE organization_id = $1 ${deptFilter} AND created_at >= CURRENT_DATE
       ORDER BY sequence_number ASC;
-    `, [orgId]);
+    `, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -747,6 +774,95 @@ app.get('/api/organizations/:orgId/profile', authenticateToken, checkTenantAcces
   }
 });
 
+// List Departments (Org Admin)
+app.get('/api/organizations/:orgId/departments', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM departments WHERE organization_id = $1 ORDER BY created_at ASC',
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve departments' });
+  }
+});
+
+// Create Department (Org Admin)
+app.post('/api/organizations/:orgId/departments', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  const { name, avgServiceTimeMinutes } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Department name is required.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO departments (organization_id, name, avg_service_time_minutes) VALUES ($1, $2, $3) RETURNING *',
+      [orgId, name.trim(), avgServiceTimeMinutes || 15]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create department' });
+  }
+});
+
+// Update Department (rename, change service time, pause/resume)
+app.patch('/api/organizations/:orgId/departments/:deptId', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { deptId } = req.params;
+  const { name, avgServiceTimeMinutes, isPaused } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE departments
+       SET name = COALESCE($1, name),
+           avg_service_time_minutes = COALESCE($2, avg_service_time_minutes),
+           is_paused = COALESCE($3, is_paused)
+       WHERE id = $4 RETURNING *`,
+      [name, avgServiceTimeMinutes, isPaused, deptId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Department not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update department' });
+  }
+});
+
+// Delete Department
+app.delete('/api/organizations/:orgId/departments/:deptId', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { deptId } = req.params;
+  try {
+    await pool.query('DELETE FROM departments WHERE id = $1', [deptId]);
+    res.json({ message: 'Department deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete department' });
+  }
+});
+
+// Public: List Departments (for customers choosing where to book)
+app.get('/api/public/organizations/:orgId/departments', async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT d.id, d.name, d.is_paused,
+              (SELECT COUNT(*) FROM queue_tokens WHERE department_id = d.id AND status = 'Waiting') as waiting_count
+       FROM departments d
+       WHERE d.organization_id = $1
+       ORDER BY d.created_at ASC`,
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve departments' });
+  }
+});
+
+
 // Update Business Profile
 app.patch('/api/organizations/:orgId/profile', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
@@ -771,12 +887,86 @@ app.patch('/api/organizations/:orgId/profile', authenticateToken, checkTenantAcc
 });
 
 // ==========================================
+// DEPARTMENT ENDPOINTS (Org Admin)
+// ==========================================
+
+// List Departments for an Organization
+app.get('/api/organizations/:orgId/departments', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM departments WHERE organization_id = $1 ORDER BY created_at ASC',
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve departments' });
+  }
+});
+
+// Create a Department
+app.post('/api/organizations/:orgId/departments', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  const { name, avgServiceTimeMinutes } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Department name is required.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO departments (organization_id, name, avg_service_time_minutes) VALUES ($1, $2, $3) RETURNING *',
+      [orgId, name.trim(), avgServiceTimeMinutes || 15]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create department' });
+  }
+});
+
+// Update a Department (name, avg service time, or pause state)
+app.patch('/api/organizations/:orgId/departments/:deptId', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { deptId } = req.params;
+  const { name, avgServiceTimeMinutes, isPaused } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE departments
+       SET name = COALESCE($1, name),
+           avg_service_time_minutes = COALESCE($2, avg_service_time_minutes),
+           is_paused = COALESCE($3, is_paused)
+       WHERE id = $4 RETURNING *`,
+      [name, avgServiceTimeMinutes, isPaused, deptId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Department not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update department' });
+  }
+});
+
+// Delete a Department
+app.delete('/api/organizations/:orgId/departments/:deptId', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { deptId } = req.params;
+  try {
+    await pool.query('DELETE FROM departments WHERE id = $1', [deptId]);
+    res.json({ message: 'Department deleted successfully.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete department' });
+  }
+});
+
+// ==========================================
 // CUSTOMER ENDPOINTS
 // ==========================================
 
 // Get Public Organization Info + Live Queue Status (QR landing page)
 app.get('/api/public/organizations/:orgId', async (req, res) => {
   const { orgId } = req.params;
+  const { deptId } = req.query;
   try {
     const orgRes = await pool.query(
       'SELECT id, name, business_type, business_address, logo_url, status FROM organizations WHERE id = $1',
@@ -785,13 +975,38 @@ app.get('/api/public/organizations/:orgId', async (req, res) => {
     if (orgRes.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
     const org = orgRes.rows[0];
 
-    const settingsRes = await pool.query('SELECT is_queue_paused FROM business_settings WHERE organization_id = $1', [orgId]);
-    const statsRes = await pool.query(`
-      SELECT
-        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_token,
-        COUNT(CASE WHEN status = 'Waiting' THEN 1 END) as waiting
-      FROM queue_tokens WHERE organization_id = $1 AND created_at >= CURRENT_DATE;
-    `, [orgId]);
+    const departmentsRes = await pool.query(
+      'SELECT id, name, is_paused FROM departments WHERE organization_id = $1 ORDER BY created_at ASC',
+      [orgId]
+    );
+
+    let isQueuePaused, currentToken, waitingCount;
+
+    if (deptId) {
+      const deptRes = await pool.query('SELECT is_paused FROM departments WHERE id = $1 AND organization_id = $2', [deptId, orgId]);
+      if (deptRes.rows.length === 0) return res.status(404).json({ error: 'Department not found' });
+      isQueuePaused = deptRes.rows[0].is_paused;
+
+      const statsRes = await pool.query(`
+        SELECT
+          (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND department_id = $2 AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_token,
+          COUNT(CASE WHEN status = 'Waiting' THEN 1 END) as waiting
+        FROM queue_tokens WHERE organization_id = $1 AND department_id = $2 AND created_at >= CURRENT_DATE;
+      `, [orgId, deptId]);
+      currentToken = statsRes.rows[0]?.current_token || 'None';
+      waitingCount = parseInt(statsRes.rows[0]?.waiting || 0);
+    } else {
+      const settingsRes = await pool.query('SELECT is_queue_paused FROM business_settings WHERE organization_id = $1', [orgId]);
+      const statsRes = await pool.query(`
+        SELECT
+          (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND department_id IS NULL AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_token,
+          COUNT(CASE WHEN status = 'Waiting' THEN 1 END) as waiting
+        FROM queue_tokens WHERE organization_id = $1 AND department_id IS NULL AND created_at >= CURRENT_DATE;
+      `, [orgId]);
+      isQueuePaused = settingsRes.rows[0]?.is_queue_paused || false;
+      currentToken = statsRes.rows[0]?.current_token || 'None';
+      waitingCount = parseInt(statsRes.rows[0]?.waiting || 0);
+    }
 
     res.json({
       id: org.id,
@@ -800,9 +1015,10 @@ app.get('/api/public/organizations/:orgId', async (req, res) => {
       address: org.business_address,
       logoUrl: org.logo_url,
       status: org.status,
-      isQueuePaused: settingsRes.rows[0]?.is_queue_paused || false,
-      currentToken: statsRes.rows[0]?.current_token || 'None',
-      waitingCount: parseInt(statsRes.rows[0]?.waiting || 0),
+      isQueuePaused,
+      currentToken,
+      waitingCount,
+      departments: departmentsRes.rows.map(d => ({ id: d.id, name: d.name, isPaused: d.is_paused })),
     });
   } catch (err) {
     console.error(err);
@@ -813,7 +1029,7 @@ app.get('/api/public/organizations/:orgId', async (req, res) => {
 // Book Token (Customer scan QR landing page)
 app.post('/api/public/queue/:orgId/book', strictLimiter, async (req, res) => {
   const { orgId } = req.params;
-  const { name, phone, email, purpose } = req.body;
+  const { name, phone, email, purpose, departmentId } = req.body;
 
   try {
     const client = await pool.connect();
@@ -825,22 +1041,34 @@ app.post('/api/public/queue/:orgId/book', strictLimiter, async (req, res) => {
       if (orgRes.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
       if (orgRes.rows[0].status !== 'Active') return res.status(400).json({ error: 'Queue system currently closed/inactive' });
 
-      // Generate incremental token code e.g. A001
-      const countRes = await client.query(`
-        SELECT COUNT(*) FROM queue_tokens 
-        WHERE organization_id = $1 AND created_at >= CURRENT_DATE;
-      `, [orgId]);
+      // If a department was specified, verify it belongs to this org and isn't paused
+      if (departmentId) {
+        const deptRes = await client.query('SELECT is_paused FROM departments WHERE id = $1 AND organization_id = $2', [departmentId, orgId]);
+        if (deptRes.rows.length === 0) return res.status(404).json({ error: 'Department not found' });
+        if (deptRes.rows[0].is_paused) return res.status(400).json({ error: 'This department is currently not accepting new tokens.' });
+      }
+
+      // Generate incremental token code e.g. A001, scoped to department if provided
+      const countRes = departmentId
+        ? await client.query(`
+            SELECT COUNT(*) FROM queue_tokens 
+            WHERE organization_id = $1 AND department_id = $2 AND created_at >= CURRENT_DATE;
+          `, [orgId, departmentId])
+        : await client.query(`
+            SELECT COUNT(*) FROM queue_tokens 
+            WHERE organization_id = $1 AND department_id IS NULL AND created_at >= CURRENT_DATE;
+          `, [orgId]);
       const tokenIndex = parseInt(countRes.rows[0].count) + 1;
       const tokenNumber = `A${String(tokenIndex).padStart(3, '0')}`;
 
       // Insert Token
       const insertQuery = `
-        INSERT INTO queue_tokens (organization_id, token_number, customer_name, customer_phone, customer_email, purpose_of_visit)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO queue_tokens (organization_id, token_number, customer_name, customer_phone, customer_email, purpose_of_visit, department_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *;
       `;
       const tokenResult = await client.query(insertQuery, [
-        orgId, tokenNumber, name, phone, email, purpose
+        orgId, tokenNumber, name, phone, email, purpose, departmentId || null
       ]);
       const newToken = tokenResult.rows[0];
 
@@ -872,18 +1100,29 @@ app.get('/api/public/tokens/:tokenId/track', async (req, res) => {
 
     if (!token) return res.status(404).json({ error: 'Token not found' });
 
-    // 2. Compute serving token and wait times
-    const statsQuery = `
-      SELECT 
-        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_serving,
-        COUNT(*) as ahead
-      FROM queue_tokens 
-      WHERE organization_id = $1 
-        AND status = 'Waiting' 
-        AND sequence_number < $2 
-        AND created_at >= CURRENT_DATE;
-    `;
-    const statsRes = await pool.query(statsQuery, [token.organization_id, token.sequence_number]);
+    // 2. Compute serving token and wait times (scoped to the same department if this token belongs to one)
+    const statsQuery = token.department_id
+      ? `SELECT 
+          (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND department_id = $3 AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_serving,
+          COUNT(*) as ahead
+        FROM queue_tokens 
+        WHERE organization_id = $1 
+          AND department_id = $3
+          AND status = 'Waiting' 
+          AND sequence_number < $2 
+          AND created_at >= CURRENT_DATE;`
+      : `SELECT 
+          (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND department_id IS NULL AND status = 'Serving' ORDER BY sequence_number ASC LIMIT 1) as current_serving,
+          COUNT(*) as ahead
+        FROM queue_tokens 
+        WHERE organization_id = $1 
+          AND department_id IS NULL
+          AND status = 'Waiting' 
+          AND sequence_number < $2 
+          AND created_at >= CURRENT_DATE;`;
+    const statsRes = token.department_id
+      ? await pool.query(statsQuery, [token.organization_id, token.sequence_number, token.department_id])
+      : await pool.query(statsQuery, [token.organization_id, token.sequence_number]);
     const stats = statsRes.rows[0];
 
     const aheadCount = parseInt(stats.ahead || 0);
@@ -962,16 +1201,19 @@ async function logNotification(orgId, tokenId, phone, message, type) {
 }
 
 // Helper: Notify customers approaching their turn
-async function notifyApproachingCustomers(client, orgId) {
-  // Find all waiting customers in order
+async function notifyApproachingCustomers(client, orgId, deptId) {
+  // Find all waiting customers in order, scoped to the department if provided
+  const deptFilter = deptId ? 'AND department_id = $2' : 'AND department_id IS NULL';
+  const params = deptId ? [orgId, deptId] : [orgId];
+
   const query = `
     SELECT id, token_number, customer_phone,
            ROW_NUMBER() OVER (ORDER BY sequence_number ASC) as position
     FROM queue_tokens
-    WHERE organization_id = $1 AND status = 'Waiting'
+    WHERE organization_id = $1 ${deptFilter} AND status = 'Waiting'
     ORDER BY sequence_number ASC;
   `;
-  const result = await client.query(query, [orgId]);
+  const result = await client.query(query, params);
   const waitingList = result.rows;
 
   for (let customer of waitingList) {

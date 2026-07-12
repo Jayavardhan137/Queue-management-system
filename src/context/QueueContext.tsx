@@ -68,6 +68,13 @@ export interface BusinessSettings {
   isPaused: boolean;
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  avgServiceTime?: number;
+  isPaused: boolean;
+}
+
 export interface PublicOrgInfo {
   id: string;
   name: string;
@@ -78,6 +85,7 @@ export interface PublicOrgInfo {
   isQueuePaused: boolean;
   currentToken: string;
   waitingCount: number;
+  departments: Department[];
 }
 
 export interface PlatformAnalytics {
@@ -86,6 +94,13 @@ export interface PlatformAnalytics {
   pendingOrgs: number;
   totalTokens: number;
   dailyCustomers: number;
+}
+
+export interface PublicDepartment {
+  id: string;
+  name: string;
+  isPaused: boolean;
+  waitingCount: number;
 }
 
 interface QueueContextType {
@@ -117,23 +132,29 @@ interface QueueContextType {
   suspendOrganization: (id: string) => Promise<void>;
   activateOrganization: (id: string) => Promise<void>;
 
-  fetchDashboard: (orgId: string) => Promise<void>;
+  fetchDashboard: (orgId: string, deptId?: string) => Promise<void>;
   fetchOwnOrgProfile: (orgId: string) => Promise<Organization | null>;
-  fetchTokens: (orgId: string) => Promise<void>;
+  fetchTokens: (orgId: string, deptId?: string) => Promise<void>;
   fetchCustomerHistory: (orgId: string, filters?: { search?: string; startDate?: string; endDate?: string; status?: string; page?: number; limit?: number }) => Promise<{ tokens: QueueToken[]; total: number; page: number; limit: number }>;
-  nextCustomer: (orgId: string) => Promise<void>;
-  skipCustomer: (orgId: string) => Promise<void>;
+  nextCustomer: (orgId: string, deptId?: string) => Promise<void>;
+  skipCustomer: (orgId: string, deptId?: string) => Promise<void>;
   recallCustomer: (orgId: string, tokenId: string) => Promise<void>;
   toggleQueuePause: (orgId: string, currentlyPaused: boolean) => Promise<void>;
   updateAvgServiceTime: (orgId: string, minutes: number) => Promise<void>;
   updateBusinessProfile: (orgId: string, name: string, phone: string, address: string, logoUrl?: string) => Promise<void>;
   updateSubscription: (orgId: string, subscriptionPlan: string, paymentStatus: string, trialStatus: string, subscriptionExpiry: string) => Promise<void>;
+
+  fetchDepartments: (orgId: string) => Promise<Department[]>;
+  createDepartment: (orgId: string, name: string, avgServiceTimeMinutes?: number) => Promise<{ ok: boolean; message?: string }>;
+  updateDepartment: (orgId: string, deptId: string, updates: { name?: string; avgServiceTimeMinutes?: number; isPaused?: boolean }) => Promise<{ ok: boolean; message?: string }>;
+  deleteDepartment: (orgId: string, deptId: string) => Promise<{ ok: boolean; message?: string }>;
   createPaymentOrder: (plan: string) => Promise<{ ok: boolean; orderId?: string; amount?: number; currency?: string; keyId?: string; message?: string }>;
   verifyPayment: (razorpayOrderId: string, razorpayPaymentId: string, razorpaySignature: string, plan: string) => Promise<{ ok: boolean; message?: string }>;
 
-  bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string) => Promise<{ ok: boolean; token?: QueueToken; message?: string }>;
+  bookToken: (orgId: string, name: string, phone: string, email?: string, purpose?: string, deptId?: string) => Promise<{ ok: boolean; token?: QueueToken; message?: string }>;
   trackToken: (tokenId: string) => Promise<any>;
-  fetchPublicOrgInfo: (orgId: string) => Promise<PublicOrgInfo | null>;
+  fetchPublicOrgInfo: (orgId: string, deptId?: string) => Promise<PublicOrgInfo | null>;
+  fetchPublicDepartments: (orgId: string) => Promise<PublicDepartment[]>;
   searchTokens: (query: string) => Promise<(QueueToken & { organizationName: string })[]>;
 }
 
@@ -410,10 +431,11 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const activateOrganization = (id: string) => updateOrgStatus(id, 'Active');
 
   // ---------- ORGANIZATION ADMIN ----------
-  const fetchDashboard = async (orgId: string) => {
+  const fetchDashboard = async (orgId: string, deptId?: string) => {
     try {
       setError(null);
-      const data = await apiFetch(`/api/organizations/${orgId}/dashboard`);
+      const query = deptId ? `?deptId=${deptId}` : '';
+      const data = await apiFetch(`/api/organizations/${orgId}/dashboard${query}`);
       setDashboard(data);
       setSettings(prev => ({
         ...prev,
@@ -440,10 +462,11 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const fetchTokens = async (orgId: string) => {
+  const fetchTokens = async (orgId: string, deptId?: string) => {
     try {
       setError(null);
-      const data = await apiFetch(`/api/organizations/${orgId}/queue/tokens`);
+      const query = deptId ? `?deptId=${deptId}` : '';
+      const data = await apiFetch(`/api/organizations/${orgId}/queue/tokens${query}`);
       setTokens(data.map(mapToken));
     } catch (e: any) {
       setError(e.message);
@@ -474,21 +497,21 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const nextCustomer = async (orgId: string) => {
+  const nextCustomer = async (orgId: string, deptId?: string) => {
     try {
       setError(null);
-      await apiFetch(`/api/organizations/${orgId}/queue/next`, { method: 'POST' });
-      await Promise.all([fetchDashboard(orgId), fetchTokens(orgId)]);
+      await apiFetch(`/api/organizations/${orgId}/queue/next`, { method: 'POST', body: JSON.stringify({ deptId }) });
+      await Promise.all([fetchDashboard(orgId, deptId), fetchTokens(orgId, deptId)]);
     } catch (e: any) {
       setError(e.message);
     }
   };
 
-  const skipCustomer = async (orgId: string) => {
+  const skipCustomer = async (orgId: string, deptId?: string) => {
     try {
       setError(null);
-      await apiFetch(`/api/organizations/${orgId}/queue/skip`, { method: 'POST' });
-      await Promise.all([fetchDashboard(orgId), fetchTokens(orgId)]);
+      await apiFetch(`/api/organizations/${orgId}/queue/skip`, { method: 'POST', body: JSON.stringify({ deptId }) });
+      await Promise.all([fetchDashboard(orgId, deptId), fetchTokens(orgId, deptId)]);
     } catch (e: any) {
       setError(e.message);
     }
@@ -544,13 +567,68 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const fetchDepartments = async (orgId: string): Promise<Department[]> => {
+    try {
+      setError(null);
+      const data = await apiFetch(`/api/organizations/${orgId}/departments`);
+      return data.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        avgServiceTime: d.avg_service_time_minutes,
+        isPaused: d.is_paused,
+      }));
+    } catch (e: any) {
+      setError(e.message);
+      return [];
+    }
+  };
+
+  const createDepartment = async (orgId: string, name: string, avgServiceTimeMinutes?: number) => {
+    try {
+      setError(null);
+      await apiFetch(`/api/organizations/${orgId}/departments`, {
+        method: 'POST',
+        body: JSON.stringify({ name, avgServiceTimeMinutes }),
+      });
+      return { ok: true };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
+  const updateDepartment = async (orgId: string, deptId: string, updates: { name?: string; avgServiceTimeMinutes?: number; isPaused?: boolean }) => {
+    try {
+      setError(null);
+      await apiFetch(`/api/organizations/${orgId}/departments/${deptId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      return { ok: true };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
+  const deleteDepartment = async (orgId: string, deptId: string) => {
+    try {
+      setError(null);
+      await apiFetch(`/api/organizations/${orgId}/departments/${deptId}`, { method: 'DELETE' });
+      return { ok: true };
+    } catch (e: any) {
+      setError(e.message);
+      return { ok: false, message: e.message };
+    }
+  };
+
   // ---------- PUBLIC / CUSTOMER ----------
-  const bookToken = async (orgId: string, name: string, phone: string, email?: string, purpose?: string) => {
+  const bookToken = async (orgId: string, name: string, phone: string, email?: string, purpose?: string, deptId?: string) => {
     try {
       setError(null);
       const data = await apiFetch(`/api/public/queue/${orgId}/book`, {
         method: 'POST',
-        body: JSON.stringify({ name, phone, email, purpose }),
+        body: JSON.stringify({ name, phone, email, purpose, departmentId: deptId }),
       });
       return { ok: true, token: mapToken(data) };
     } catch (e: any) {
@@ -569,17 +647,34 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const fetchPublicOrgInfo = async (orgId: string) => {
+  const fetchPublicOrgInfo = async (orgId: string, deptId?: string) => {
     try {
       setError(null);
       // This is a public endpoint, so we call fetch directly (no auth header needed)
-      const res = await fetch(`${API_URL}/api/public/organizations/${orgId}`);
+      const query = deptId ? `?deptId=${deptId}` : '';
+      const res = await fetch(`${API_URL}/api/public/organizations/${orgId}${query}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load organization');
       return data;
     } catch (e: any) {
       setError(e.message);
       return null;
+    }
+  };
+
+  const fetchPublicDepartments = async (orgId: string): Promise<PublicDepartment[]> => {
+    try {
+      const res = await fetch(`${API_URL}/api/public/organizations/${orgId}/departments`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load departments');
+      return data.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        isPaused: d.is_paused,
+        waitingCount: parseInt(d.waiting_count) || 0,
+      }));
+    } catch (e: any) {
+      return [];
     }
   };
 
@@ -628,11 +723,16 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateAvgServiceTime,
         updateBusinessProfile,
         updateSubscription,
+        fetchDepartments,
+        createDepartment,
+        updateDepartment,
+        deleteDepartment,
         createPaymentOrder,
         verifyPayment,
         bookToken,
         trackToken,
         fetchPublicOrgInfo,
+        fetchPublicDepartments,
         searchTokens,
       }}
     >

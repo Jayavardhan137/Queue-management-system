@@ -26,7 +26,11 @@ import {
   History,
   FileDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Layers,
+  Plus,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -42,6 +46,10 @@ export default function AdminDashboard() {
     fetchOwnOrgProfile,
     fetchTokens,
     fetchCustomerHistory,
+    fetchDepartments,
+    createDepartment,
+    updateDepartment,
+    deleteDepartment,
     nextCustomer,
     skipCustomer,
     recallCustomer,
@@ -49,7 +57,7 @@ export default function AdminDashboard() {
     updateAvgServiceTime,
     updateBusinessProfile
   } = useQueue();
-  const [activeTab, setActiveTab] = useState<'Live' | 'QR' | 'Customers' | 'Reports' | 'Settings'>('Live');
+  const [activeTab, setActiveTab] = useState<'Live' | 'QR' | 'Customers' | 'Departments' | 'Reports' | 'Settings'>('Live');
 
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
@@ -71,6 +79,16 @@ export default function AdminDashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const HISTORY_PAGE_SIZE = 25;
 
+  // Department state
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+  const [newDeptName, setNewDeptName] = useState('');
+  const [newDeptService, setNewDeptService] = useState(15);
+  const [deptError, setDeptError] = useState('');
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editDeptName, setEditDeptName] = useState('');
+  const [editDeptService, setEditDeptService] = useState(15);
+
   const printAreaRef = useRef<HTMLDivElement>(null);
   const startDateRef = useRef<HTMLInputElement>(null);
   const endDateRef = useRef<HTMLInputElement>(null);
@@ -87,8 +105,6 @@ export default function AdminDashboard() {
   // Load org profile (org list isn't fetched for this role by default, so we fetch just this org's data via dashboard/tokens)
   useEffect(() => {
     if (orgId) {
-      fetchDashboard(orgId);
-      fetchTokens(orgId);
       fetchOwnOrgProfile(orgId).then(org => {
         if (org) {
           setProfileName(org.name);
@@ -97,13 +113,23 @@ export default function AdminDashboard() {
           setProfileLogo(org.logoUrl || '🏥');
         }
       });
+      fetchDepartments(orgId).then(setDepartments);
+    }
+  }, [orgId]);
+
+  // Poll dashboard/tokens for the currently selected department (empty = general/no department)
+  useEffect(() => {
+    if (orgId) {
+      const deptArg = selectedDeptId || undefined;
+      fetchDashboard(orgId, deptArg);
+      fetchTokens(orgId, deptArg);
       const interval = setInterval(() => {
-        fetchDashboard(orgId);
-        fetchTokens(orgId);
+        fetchDashboard(orgId, deptArg);
+        fetchTokens(orgId, deptArg);
       }, 8000);
       return () => clearInterval(interval);
     }
-  }, [orgId]);
+  }, [orgId, selectedDeptId]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') setSiteOrigin(window.location.origin);
@@ -156,7 +182,9 @@ export default function AdminDashboard() {
       )
     : waitingTokens;
 
-  const qrTargetUrl = `${siteOrigin}/queue/${orgId}`;
+  const qrTargetUrl = selectedDeptId
+    ? `${siteOrigin}/queue/${orgId}?dept=${selectedDeptId}`
+    : `${siteOrigin}/queue/${orgId}`;
 
   const loadCustomerHistory = async (page: number = 1) => {
     if (!orgId) return;
@@ -184,6 +212,61 @@ export default function AdminDashboard() {
   const handleHistorySearch = (e: React.FormEvent) => {
     e.preventDefault();
     loadCustomerHistory(1);
+  };
+
+  const refreshDepartments = async () => {
+    if (!orgId) return;
+    const depts = await fetchDepartments(orgId);
+    setDepartments(depts);
+  };
+
+  const handleCreateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeptError('');
+    if (!orgId || !newDeptName.trim()) return;
+    const result = await createDepartment(orgId, newDeptName.trim(), newDeptService);
+    if (result.ok) {
+      setNewDeptName('');
+      setNewDeptService(15);
+      await refreshDepartments();
+    } else {
+      setDeptError(result.message || 'Failed to create department.');
+    }
+  };
+
+  const startEditingDept = (dept: any) => {
+    setEditingDeptId(dept.id);
+    setEditDeptName(dept.name);
+    setEditDeptService(dept.avgServiceTimeMinutes ?? dept.avg_service_time_minutes ?? 15);
+  };
+
+  const handleSaveEditDept = async (deptId: string) => {
+    if (!orgId) return;
+    const result = await updateDepartment(orgId, deptId, { name: editDeptName, avgServiceTimeMinutes: editDeptService });
+    if (result.ok) {
+      setEditingDeptId(null);
+      await refreshDepartments();
+    } else {
+      setDeptError(result.message || 'Failed to update department.');
+    }
+  };
+
+  const handleToggleDeptPause = async (dept: any) => {
+    if (!orgId) return;
+    await updateDepartment(orgId, dept.id, { isPaused: !dept.isPaused });
+    await refreshDepartments();
+  };
+
+  const handleDeleteDepartment = async (deptId: string) => {
+    if (!orgId) return;
+    if (!confirm('Delete this department? This cannot be undone. Existing customer records will be kept but unlinked from this department.')) return;
+    const result = await deleteDepartment(orgId, deptId);
+    if (result.ok) {
+      if (selectedDeptId === deptId) setSelectedDeptId('');
+      await refreshDepartments();
+    } else {
+      setDeptError(result.message || 'Failed to delete department.');
+    }
   };
 
   const handleExportCsv = async () => {
@@ -242,6 +325,7 @@ export default function AdminDashboard() {
             {[
               { id: 'Live', label: 'Live Desk', icon: Users },
               { id: 'QR', label: 'QR Code Portal', icon: QrCode },
+              { id: 'Departments', label: 'Departments', icon: Layers },
               { id: 'Customers', label: 'Customer History', icon: History },
               { id: 'Reports', label: 'Reports & Audit', icon: BarChart3 },
               { id: 'Settings', label: 'Settings', icon: Settings2 }
@@ -283,7 +367,7 @@ export default function AdminDashboard() {
         <div className="flex justify-between items-center print:hidden">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">
-              {activeTab === 'Live' ? 'Live Desk' : activeTab === 'QR' ? 'QR Portal' : activeTab === 'Customers' ? 'Customer History' : activeTab === 'Reports' ? 'Reports & Logs' : 'Workspace Settings'}
+              {activeTab === 'Live' ? 'Live Desk' : activeTab === 'QR' ? 'QR Portal' : activeTab === 'Departments' ? 'Departments' : activeTab === 'Customers' ? 'Customer History' : activeTab === 'Reports' ? 'Reports & Logs' : 'Workspace Settings'}
             </h1>
             <p className="text-sm text-zinc-400">
               {isPaused ? (
@@ -306,6 +390,22 @@ export default function AdminDashboard() {
 
         {activeTab === 'Live' && (
           <div className="space-y-8 print:hidden">
+            {departments.length > 0 && (
+              <div className="flex items-center gap-3 p-4 rounded-2xl glass-panel border border-white/5">
+                <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
+                <label className="text-xs font-bold text-zinc-400 shrink-0">Viewing Queue For:</label>
+                <select
+                  value={selectedDeptId}
+                  onChange={e => setSelectedDeptId(e.target.value)}
+                  className="flex-1 max-w-xs py-2 px-3 premium-input text-xs text-white bg-[#121212] border-white/10"
+                >
+                  <option value="" className="bg-[#121212] text-white">General (No Department)</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id} className="bg-[#121212] text-white">{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-5">
               <div className="p-5 rounded-3xl glass-panel border border-indigo-500/30 bg-indigo-500/5 space-y-2 lg:col-span-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Current Serving</p>
@@ -350,13 +450,13 @@ export default function AdminDashboard() {
 
                       <div className="grid grid-cols-2 gap-3">
                         <button
-                          onClick={() => nextCustomer(orgId)}
+                          onClick={() => nextCustomer(orgId, selectedDeptId || undefined)}
                           className="py-3 px-4 font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex items-center justify-center gap-1 cursor-pointer transition-colors"
                         >
                           <UserCheck className="w-4 h-4" /> Complete & Call Next
                         </button>
                         <button
-                          onClick={() => skipCustomer(orgId)}
+                          onClick={() => skipCustomer(orgId, selectedDeptId || undefined)}
                           className="py-3 px-4 font-bold rounded-xl bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 text-xs flex items-center justify-center gap-1 cursor-pointer transition-all"
                         >
                           <UserMinus className="w-4 h-4" /> Skip Customer
@@ -380,7 +480,7 @@ export default function AdminDashboard() {
                         <p className="text-xs text-zinc-500 max-w-xs mx-auto mt-1">Advance the queue below to bring in the next customer in the FIFO list.</p>
                       </div>
                       <button
-                        onClick={() => nextCustomer(orgId)}
+                        onClick={() => nextCustomer(orgId, selectedDeptId || undefined)}
                         disabled={totalWaiting === 0}
                         className="py-2.5 px-6 font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs disabled:opacity-40 disabled:pointer-events-none cursor-pointer inline-flex items-center gap-1 transition-colors"
                       >
@@ -441,6 +541,22 @@ export default function AdminDashboard() {
             <div className="md:col-span-5 p-6 rounded-3xl glass-panel border border-white/5 flex flex-col items-center text-center space-y-6">
               <h4 className="font-extrabold text-lg">Unique Organization QR Code</h4>
 
+              {departments.length > 0 && (
+                <div className="w-full space-y-1.5 text-left">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Generate QR For:</label>
+                  <select
+                    value={selectedDeptId}
+                    onChange={e => setSelectedDeptId(e.target.value)}
+                    className="w-full py-2.5 px-3 premium-input text-sm text-white bg-[#121212] border-white/10"
+                  >
+                    <option value="" className="bg-[#121212] text-white">General (No Department)</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id} className="bg-[#121212] text-white">{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div ref={printAreaRef} className="p-6 bg-white rounded-2xl border border-zinc-200 inline-block shadow-lg relative print:fixed print:inset-0 print:z-[9999] print:bg-white print:flex print:flex-col print:items-center print:justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -449,7 +565,7 @@ export default function AdminDashboard() {
                   className="w-48 h-48 print:w-96 print:h-96"
                 />
                 <p className="text-[10px] text-zinc-500 font-mono mt-3 uppercase tracking-wider print:text-lg print:text-black print:font-bold print:mt-6">
-                  {profileName} Queue Portal
+                  {profileName} {selectedDeptId ? `— ${departments.find(d => d.id === selectedDeptId)?.name || ''}` : ''} Queue Portal
                 </p>
               </div>
 
@@ -499,6 +615,136 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Departments' && (
+          <div className="space-y-6 max-w-3xl">
+            <div className="p-6 rounded-3xl glass-panel border border-white/5 space-y-4">
+              <h4 className="font-extrabold text-lg">Add a Department / Branch</h4>
+              <p className="text-xs text-zinc-400">
+                Add separate queues for different sections of your organization — for example a hospital might add &quot;OP&quot; and &quot;Cardiology&quot;, a bank might add &quot;Deposits&quot; and &quot;Loans&quot;. Each gets its own independent live queue and QR code. You can name these anything you like.
+              </p>
+
+              {deptError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
+                  {deptError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateDepartment} className="flex flex-wrap gap-3 items-end">
+                <div className="flex-1 min-w-[200px] space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Department Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. OP, Billing, Haircut..."
+                    value={newDeptName}
+                    onChange={e => setNewDeptName(e.target.value)}
+                    className="w-full py-2.5 px-3 premium-input text-sm text-white"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Avg Service Time (min)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={newDeptService}
+                    onChange={e => setNewDeptService(parseInt(e.target.value) || 1)}
+                    className="w-28 py-2.5 px-3 premium-input text-sm text-white"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="py-2.5 px-5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Department
+                </button>
+              </form>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-bold text-sm text-zinc-400 uppercase tracking-wider">Existing Departments ({departments.length})</h4>
+              {departments.length === 0 ? (
+                <div className="p-8 rounded-3xl glass-panel border border-dashed border-white/10 text-center">
+                  <Layers className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-sm text-zinc-500">No departments yet. Add one above, or leave this empty to run a single general queue.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {departments.map(dept => (
+                    <div key={dept.id} className="p-4 rounded-2xl glass-panel border border-white/5 flex items-center justify-between gap-4">
+                      {editingDeptId === dept.id ? (
+                        <div className="flex-1 flex flex-wrap gap-3 items-center">
+                          <input
+                            type="text"
+                            value={editDeptName}
+                            onChange={e => setEditDeptName(e.target.value)}
+                            className="flex-1 min-w-[140px] py-2 px-3 premium-input text-sm text-white"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            value={editDeptService}
+                            onChange={e => setEditDeptService(parseInt(e.target.value) || 1)}
+                            className="w-24 py-2 px-3 premium-input text-sm text-white"
+                          />
+                          <button
+                            onClick={() => handleSaveEditDept(dept.id)}
+                            className="py-2 px-3 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingDeptId(null)}
+                            className="py-2 px-3 text-xs font-bold rounded-lg border border-white/10 hover:bg-white/5 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-3">
+                            <span className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                              <Layers className="w-4 h-4 text-indigo-400" />
+                            </span>
+                            <div>
+                              <p className="font-bold text-white text-sm">{dept.name}</p>
+                              <p className="text-[10px] text-zinc-500">
+                                {dept.avgServiceTimeMinutes ?? dept.avg_service_time_minutes ?? 15} min/customer
+                                {dept.isPaused ?? dept.is_paused ? ' · Paused' : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleToggleDeptPause(dept)}
+                              className={`py-1.5 px-3 text-[10px] font-bold rounded-lg border cursor-pointer transition-all ${
+                                (dept.isPaused ?? dept.is_paused) ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                              }`}
+                            >
+                              {(dept.isPaused ?? dept.is_paused) ? 'Resume' : 'Pause'}
+                            </button>
+                            <button
+                              onClick={() => startEditingDept(dept)}
+                              className="p-2 rounded-lg border border-white/10 hover:bg-white/5 text-zinc-400 hover:text-white cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDepartment(dept.id)}
+                              className="p-2 rounded-lg border border-white/10 hover:bg-rose-500/10 text-zinc-400 hover:text-rose-400 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
