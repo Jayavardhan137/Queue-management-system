@@ -18,7 +18,8 @@
     "pg": "^8.13.1",
     "razorpay": "^2.9.4",
     "resend": "^4.0.1",
-    "twilio": "^5.4.0"
+    "twilio": "^5.4.0",
+    "@google/generative-ai": "^0.21.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

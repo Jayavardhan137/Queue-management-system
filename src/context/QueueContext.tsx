@@ -158,6 +158,7 @@ interface QueueContextType {
   trackToken: (tokenId: string) => Promise<any>;
   fetchPublicOrgInfo: (orgId: string, deptId?: string) => Promise<PublicOrgInfo | null>;
   fetchPublicDepartments: (orgId: string) => Promise<PublicDepartment[]>;
+  sendChatMessage: (orgId: string, message: string, history: { role: 'user' | 'assistant'; content: string }[]) => Promise<{ ok: boolean; reply?: string; message?: string }>;
   searchTokens: (query: string) => Promise<(QueueToken & { organizationName: string })[]>;
 }
 
@@ -681,6 +682,25 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const sendChatMessage = async (
+    orgId: string,
+    message: string,
+    history: { role: 'user' | 'assistant'; content: string }[]
+  ) => {
+    try {
+      const res = await fetch(`${API_URL}/api/public/organizations/${orgId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, history }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to get a response.');
+      return { ok: true, reply: data.reply };
+    } catch (e: any) {
+      return { ok: false, message: e.message };
+    }
+  };
+
   const searchTokens = async (query: string) => {
     try {
       setError(null);
@@ -736,6 +756,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         trackToken,
         fetchPublicOrgInfo,
         fetchPublicDepartments,
+        sendChatMessage,
         searchTokens,
       }}
     >
