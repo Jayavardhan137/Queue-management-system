@@ -22,7 +22,11 @@ import {
   Phone,
   MapPin,
   CheckCircle,
-  Search
+  Search,
+  History,
+  FileDown,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -37,6 +41,7 @@ export default function AdminDashboard() {
     fetchDashboard,
     fetchOwnOrgProfile,
     fetchTokens,
+    fetchCustomerHistory,
     nextCustomer,
     skipCustomer,
     recallCustomer,
@@ -44,7 +49,7 @@ export default function AdminDashboard() {
     updateAvgServiceTime,
     updateBusinessProfile
   } = useQueue();
-  const [activeTab, setActiveTab] = useState<'Live' | 'QR' | 'Reports' | 'Settings'>('Live');
+  const [activeTab, setActiveTab] = useState<'Live' | 'QR' | 'Customers' | 'Reports' | 'Settings'>('Live');
 
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
@@ -54,6 +59,17 @@ export default function AdminDashboard() {
   const [isSaved, setIsSaved] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [siteOrigin, setSiteOrigin] = useState('');
+
+  // Customer History tab state
+  const [historyTokens, setHistoryTokens] = useState<any[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStartDate, setHistoryStartDate] = useState('');
+  const [historyEndDate, setHistoryEndDate] = useState('');
+  const [historyStatus, setHistoryStatus] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const HISTORY_PAGE_SIZE = 25;
 
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -140,6 +156,73 @@ export default function AdminDashboard() {
 
   const qrTargetUrl = `${siteOrigin}/queue/${orgId}`;
 
+  const loadCustomerHistory = async (page: number = 1) => {
+    if (!orgId) return;
+    setHistoryLoading(true);
+    const result = await fetchCustomerHistory(orgId, {
+      search: historySearch || undefined,
+      startDate: historyStartDate || undefined,
+      endDate: historyEndDate || undefined,
+      status: historyStatus || undefined,
+      page,
+      limit: HISTORY_PAGE_SIZE,
+    });
+    setHistoryTokens(result.tokens);
+    setHistoryTotal(result.total);
+    setHistoryPage(result.page);
+    setHistoryLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'Customers' && orgId) {
+      loadCustomerHistory(1);
+    }
+  }, [activeTab]);
+
+  const handleHistorySearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    loadCustomerHistory(1);
+  };
+
+  const handleExportCsv = async () => {
+    if (!orgId) return;
+    const result = await fetchCustomerHistory(orgId, {
+      search: historySearch || undefined,
+      startDate: historyStartDate || undefined,
+      endDate: historyEndDate || undefined,
+      status: historyStatus || undefined,
+      page: 1,
+      limit: 10000,
+    });
+
+    const headers = ['Token Number', 'Customer Name', 'Phone', 'Email', 'Purpose', 'Status', 'Date/Time'];
+    const rows = result.tokens.map(t => [
+      t.tokenNumber,
+      t.customerName,
+      t.customerPhone,
+      t.customerEmail || '',
+      t.purpose || '',
+      t.status,
+      new Date(t.createdAt).toLocaleString(),
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `customer_history_${profileName || 'export'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const historyTotalPages = Math.max(Math.ceil(historyTotal / HISTORY_PAGE_SIZE), 1);
+
   return (
     <div className="min-h-screen bg-[#030303] text-[#f5f5f7] flex">
       <aside className="w-64 border-r border-white/5 bg-black/40 flex flex-col justify-between p-6 shrink-0 print:hidden">
@@ -157,6 +240,7 @@ export default function AdminDashboard() {
             {[
               { id: 'Live', label: 'Live Desk', icon: Users },
               { id: 'QR', label: 'QR Code Portal', icon: QrCode },
+              { id: 'Customers', label: 'Customer History', icon: History },
               { id: 'Reports', label: 'Reports & Audit', icon: BarChart3 },
               { id: 'Settings', label: 'Settings', icon: Settings2 }
             ].map((tab) => {
@@ -197,7 +281,7 @@ export default function AdminDashboard() {
         <div className="flex justify-between items-center print:hidden">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">
-              {activeTab === 'Live' ? 'Live Desk' : activeTab === 'QR' ? 'QR Portal' : activeTab === 'Reports' ? 'Reports & Logs' : 'Workspace Settings'}
+              {activeTab === 'Live' ? 'Live Desk' : activeTab === 'QR' ? 'QR Portal' : activeTab === 'Customers' ? 'Customer History' : activeTab === 'Reports' ? 'Reports & Logs' : 'Workspace Settings'}
             </h1>
             <p className="text-sm text-zinc-400">
               {isPaused ? (
@@ -413,6 +497,140 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Customers' && (
+          <div className="space-y-6">
+            <form onSubmit={handleHistorySearch} className="flex flex-wrap gap-3 items-end p-5 rounded-3xl glass-panel border border-white/5">
+              <div className="flex-1 min-w-[180px] space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Search Name or Phone</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="e.g. John or 98765..."
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className="w-full py-2 pl-9 pr-3 premium-input text-xs"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">From</label>
+                <input
+                  type="date"
+                  value={historyStartDate}
+                  onChange={e => setHistoryStartDate(e.target.value)}
+                  className="py-2 px-3 premium-input text-xs text-white"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">To</label>
+                <input
+                  type="date"
+                  value={historyEndDate}
+                  onChange={e => setHistoryEndDate(e.target.value)}
+                  className="py-2 px-3 premium-input text-xs text-white"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Status</label>
+                <select
+                  value={historyStatus}
+                  onChange={e => setHistoryStatus(e.target.value)}
+                  className="py-2 px-3 premium-input text-xs text-white bg-[#121212] border-white/10"
+                >
+                  <option value="" className="bg-[#121212] text-white">All</option>
+                  <option value="Waiting" className="bg-[#121212] text-white">Waiting</option>
+                  <option value="Serving" className="bg-[#121212] text-white">Serving</option>
+                  <option value="Completed" className="bg-[#121212] text-white">Completed</option>
+                  <option value="Skipped" className="bg-[#121212] text-white">Skipped</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                className="py-2 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer transition-colors"
+              >
+                Apply Filters
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="py-2 px-4 text-xs font-bold rounded-xl border border-white/10 hover:bg-white/5 text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <FileDown className="w-3.5 h-3.5" /> Export CSV
+              </button>
+            </form>
+
+            <div className="glass-panel rounded-3xl border border-white/5 overflow-hidden">
+              <div className="flex justify-between items-center px-5 py-3 border-b border-white/5">
+                <span className="text-xs text-zinc-400">{historyTotal} total record{historyTotal !== 1 ? 's' : ''} found</span>
+                <span className="text-xs text-zinc-500">Page {historyPage} of {historyTotalPages}</span>
+              </div>
+
+              {historyLoading ? (
+                <p className="p-8 text-sm text-zinc-500 text-center">Loading customer history...</p>
+              ) : historyTokens.length === 0 ? (
+                <p className="p-8 text-sm text-zinc-500 text-center">No customer records found for these filters.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-white/5 text-left text-zinc-500 uppercase text-[10px] tracking-wider">
+                        <th className="p-4 font-bold">Token</th>
+                        <th className="p-4 font-bold">Customer</th>
+                        <th className="p-4 font-bold">Phone</th>
+                        <th className="p-4 font-bold">Purpose</th>
+                        <th className="p-4 font-bold">Status</th>
+                        <th className="p-4 font-bold">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {historyTokens.map(token => (
+                        <tr key={token.id} className="hover:bg-white/2 transition-colors">
+                          <td className="p-4 font-extrabold text-indigo-400">{token.tokenNumber}</td>
+                          <td className="p-4 font-semibold text-white">{token.customerName}</td>
+                          <td className="p-4 text-zinc-400">{token.customerPhone}</td>
+                          <td className="p-4 text-zinc-400">{token.purpose || '—'}</td>
+                          <td className="p-4">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              token.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                              token.status === 'Skipped' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                              token.status === 'Serving' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                              'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            }`}>
+                              {token.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-zinc-500">{new Date(token.createdAt).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {historyTotalPages > 1 && (
+                <div className="flex justify-center items-center gap-3 p-4 border-t border-white/5">
+                  <button
+                    onClick={() => loadCustomerHistory(historyPage - 1)}
+                    disabled={historyPage <= 1}
+                    className="p-2 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-zinc-400">Page {historyPage} of {historyTotalPages}</span>
+                  <button
+                    onClick={() => loadCustomerHistory(historyPage + 1)}
+                    disabled={historyPage >= historyTotalPages}
+                    className="p-2 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

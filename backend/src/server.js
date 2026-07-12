@@ -582,6 +582,58 @@ app.get('/api/organizations/:orgId/queue/tokens', authenticateToken, checkTenant
   }
 });
 
+// Customer History (all-time, searchable, filterable, paginated)
+app.get('/api/organizations/:orgId/customers/history', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  const { search, startDate, endDate, status, page = 1, limit = 50 } = req.query;
+
+  try {
+    const conditions = ['organization_id = $1'];
+    const params = [orgId];
+    let idx = 2;
+
+    if (search) {
+      conditions.push(`(customer_name ILIKE $${idx} OR customer_phone ILIKE $${idx})`);
+      params.push(`%${search}%`);
+      idx++;
+    }
+    if (startDate) {
+      conditions.push(`created_at >= $${idx}`);
+      params.push(startDate);
+      idx++;
+    }
+    if (endDate) {
+      conditions.push(`created_at <= $${idx}`);
+      params.push(endDate);
+      idx++;
+    }
+    if (status) {
+      conditions.push(`status = $${idx}`);
+      params.push(status);
+      idx++;
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const pageLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 10000);
+    const offset = (pageNum - 1) * pageLimit;
+
+    const countResult = await pool.query(`SELECT COUNT(*) FROM queue_tokens WHERE ${whereClause}`, params);
+    const total = parseInt(countResult.rows[0].count);
+
+    const dataParams = [...params, pageLimit, offset];
+    const dataResult = await pool.query(
+      `SELECT * FROM queue_tokens WHERE ${whereClause} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+      dataParams
+    );
+
+    res.json({ tokens: dataResult.rows, total, page: pageNum, limit: pageLimit });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve customer history' });
+  }
+});
+
 // Recall / Re-notify a Customer
 app.post('/api/organizations/:orgId/queue/:tokenId/recall', authenticateToken, checkTenantAccess, async (req, res) => {
   const { tokenId } = req.params;

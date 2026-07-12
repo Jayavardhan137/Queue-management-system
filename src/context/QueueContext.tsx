@@ -120,6 +120,7 @@ interface QueueContextType {
   fetchDashboard: (orgId: string) => Promise<void>;
   fetchOwnOrgProfile: (orgId: string) => Promise<Organization | null>;
   fetchTokens: (orgId: string) => Promise<void>;
+  fetchCustomerHistory: (orgId: string, filters?: { search?: string; startDate?: string; endDate?: string; status?: string; page?: number; limit?: number }) => Promise<{ tokens: QueueToken[]; total: number; page: number; limit: number }>;
   nextCustomer: (orgId: string) => Promise<void>;
   skipCustomer: (orgId: string) => Promise<void>;
   recallCustomer: (orgId: string, tokenId: string) => Promise<void>;
@@ -449,6 +450,30 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const fetchCustomerHistory: QueueContextType['fetchCustomerHistory'] = async (orgId, filters = {}) => {
+    try {
+      setError(null);
+      const params = new URLSearchParams();
+      if (filters.search) params.set('search', filters.search);
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+      if (filters.status) params.set('status', filters.status);
+      params.set('page', String(filters.page || 1));
+      params.set('limit', String(filters.limit || 50));
+
+      const data = await apiFetch(`/api/organizations/${orgId}/customers/history?${params.toString()}`);
+      return {
+        tokens: data.tokens.map(mapToken),
+        total: data.total,
+        page: data.page,
+        limit: data.limit,
+      };
+    } catch (e: any) {
+      setError(e.message);
+      return { tokens: [], total: 0, page: 1, limit: 50 };
+    }
+  };
+
   const nextCustomer = async (orgId: string) => {
     try {
       setError(null);
@@ -595,6 +620,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         fetchDashboard,
         fetchOwnOrgProfile,
         fetchTokens,
+        fetchCustomerHistory,
         nextCustomer,
         skipCustomer,
         recallCustomer,
