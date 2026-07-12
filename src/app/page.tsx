@@ -436,7 +436,11 @@ export default function Home() {
 
           <div className="border-t border-white/5 pt-6 flex justify-between items-center text-[10px] text-zinc-500">
             <span>&copy; {new Date().getFullYear()} QueueFlow AI. All rights reserved.</span>
-            <Link href="/login" className="hover:text-white transition-colors">Super Admin Login</Link>
+            <div className="flex items-center gap-4">
+              <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+              <Link href="/login" className="hover:text-white transition-colors">Super Admin Login</Link>
+            </div>
           </div>
         </section>
 

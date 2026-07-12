@@ -461,7 +461,15 @@ function RegisterForm() {
                 className="w-4 h-4 rounded border-white/10 bg-[#121212] text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
               <label htmlFor="terms" className="text-xs text-zinc-400 select-none cursor-pointer">
-                I accept the <span className="text-indigo-400 underline font-semibold">Terms of Service</span> and authorize document screening.
+                I accept the{' '}
+                <Link href="/terms" target="_blank" className="text-indigo-400 underline font-semibold hover:text-indigo-300">
+                  Terms of Service
+                </Link>
+                {' '}and{' '}
+                <Link href="/privacy" target="_blank" className="text-indigo-400 underline font-semibold hover:text-indigo-300">
+                  Privacy Policy
+                </Link>
+                , and authorize document screening.
               </label>
             </div>
 
