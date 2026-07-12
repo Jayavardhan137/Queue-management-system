@@ -72,6 +72,8 @@ export default function AdminDashboard() {
   const HISTORY_PAGE_SIZE = 25;
 
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const startDateRef = useRef<HTMLInputElement>(null);
+  const endDateRef = useRef<HTMLInputElement>(null);
 
   const orgId = currentUser?.organizationId;
 
@@ -520,19 +522,25 @@ export default function AdminDashboard() {
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">From</label>
                 <input
+                  ref={startDateRef}
                   type="date"
                   value={historyStartDate}
                   onChange={e => setHistoryStartDate(e.target.value)}
-                  className="py-2 px-3 premium-input text-xs text-white"
+                  onClick={() => (startDateRef.current as any)?.showPicker?.()}
+                  style={{ colorScheme: 'dark' }}
+                  className="py-2 px-3 premium-input text-xs text-white cursor-pointer"
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">To</label>
                 <input
+                  ref={endDateRef}
                   type="date"
                   value={historyEndDate}
                   onChange={e => setHistoryEndDate(e.target.value)}
-                  className="py-2 px-3 premium-input text-xs text-white"
+                  onClick={() => (endDateRef.current as any)?.showPicker?.()}
+                  style={{ colorScheme: 'dark' }}
+                  className="py-2 px-3 premium-input text-xs text-white cursor-pointer"
                 />
               </div>
               <div className="space-y-1.5">
