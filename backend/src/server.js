@@ -444,6 +444,26 @@ app.get('/api/superadmin/analytics', authenticateToken, authorizeRoles('Super Ad
 // ==========================================
 
 // Get Organization Active Queue Metrics
+// AI-Categorized Purpose of Visit Breakdown (for Reports tab)
+app.get('/api/organizations/:orgId/insights/purpose-categories', authenticateToken, checkTenantAccess, async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT purpose_category, COUNT(*) as count
+       FROM queue_tokens
+       WHERE organization_id = $1 AND purpose_category IS NOT NULL
+       GROUP BY purpose_category
+       ORDER BY count DESC
+       LIMIT 10;`,
+      [orgId]
+    );
+    res.json(result.rows.map(r => ({ category: r.purpose_category, count: parseInt(r.count) })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve purpose categories' });
+  }
+});
+
 app.get('/api/organizations/:orgId/dashboard', authenticateToken, checkTenantAccess, async (req, res) => {
   const { orgId } = req.params;
   const { deptId } = req.query;
@@ -1170,6 +1190,13 @@ app.post('/api/public/queue/:orgId/book', strictLimiter, async (req, res) => {
 
       await client.query('COMMIT');
       res.status(201).json(newToken);
+
+      // Categorize the purpose of visit in the background (don't make the customer wait on this)
+      if (purpose && purpose.trim().length > 0) {
+        categorizePurposeAndSave(newToken.id, purpose.trim()).catch(err => {
+          console.error('Background purpose categorization failed:', err.message);
+        });
+      }
     } catch (err) {
     console.error(err);
       await client.query('ROLLBACK');
@@ -1352,6 +1379,32 @@ async function getSmartAvgServiceTime(orgId, deptId, fallbackMinutes) {
   } catch (err) {
     console.error('Smart wait time prediction failed, using fallback:', err.message);
     return { minutes: fallbackMinutes, isPredicted: false, sampleSize: 0 };
+  }
+}
+
+// Uses Gemini to classify a customer's free-text "purpose of visit" into a short, clean category.
+// Runs in the background after booking so it never delays the customer's confirmation.
+async function categorizePurposeAndSave(tokenId, purposeText) {
+  if (!process.env.GEMINI_API_KEY) return; // Silently skip if AI isn't configured yet
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const prompt = `Classify the following customer visit reason into a short category label of 1-3 words only (e.g. "Consultation", "Bill Payment", "Document Renewal", "Product Inquiry", "Repair Service", "General Inquiry"). Respond with ONLY the category label, no punctuation, no explanation, no quotes.
+
+Visit reason: "${purposeText.slice(0, 300)}"
+
+Category:`;
+
+    const result = await model.generateContent(prompt);
+    let category = result.response.text().trim().replace(/["'.]/g, '');
+
+    // Guard against the model returning something unreasonably long (a sign it ignored instructions)
+    if (category.length > 60) category = category.slice(0, 60);
+    if (!category) return;
+
+    await pool.query('UPDATE queue_tokens SET purpose_category = $1 WHERE id = $2', [category, tokenId]);
+  } catch (err) {
+    console.error('AI purpose categorization error:', err.message);
   }
 }
 

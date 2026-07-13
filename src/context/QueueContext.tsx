@@ -47,6 +47,7 @@ export interface QueueToken {
   customerPhone: string;
   customerEmail?: string;
   purpose?: string;
+  purposeCategory?: string;
   status: TokenStatus;
   sequence: number;
   createdAt: string;
@@ -130,6 +131,7 @@ interface QueueContextType {
   fetchOrganizations: () => Promise<void>;
   fetchOrgDocuments: (orgId: string) => Promise<{ documentType: string; fileUrl: string }[]>;
   fetchAnalytics: () => Promise<void>;
+  fetchPurposeCategories: (orgId: string) => Promise<{ category: string; count: number }[]>;
   approveOrganization: (id: string) => Promise<void>;
   rejectOrganization: (id: string) => Promise<void>;
   suspendOrganization: (id: string) => Promise<void>;
@@ -195,6 +197,7 @@ const mapToken = (t: any): QueueToken => ({
   customerPhone: t.customer_phone,
   customerEmail: t.customer_email,
   purpose: t.purpose_of_visit,
+  purposeCategory: t.purpose_category,
   status: t.status,
   sequence: t.sequence_number,
   createdAt: t.created_at,
@@ -414,6 +417,16 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
     } catch (e: any) {
       setError(e.message);
+    }
+  };
+
+  const fetchPurposeCategories = async (orgId: string) => {
+    try {
+      setError(null);
+      return await apiFetch(`/api/organizations/${orgId}/insights/purpose-categories`);
+    } catch (e: any) {
+      setError(e.message);
+      return [];
     }
   };
 
@@ -743,6 +756,7 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         fetchOrganizations,
         fetchOrgDocuments,
         fetchAnalytics,
+        fetchPurposeCategories,
         approveOrganization,
         rejectOrganization,
         suspendOrganization,

@@ -47,6 +47,7 @@ export default function AdminDashboard() {
     fetchOwnOrgProfile,
     fetchTokens,
     fetchCustomerHistory,
+    fetchPurposeCategories,
     fetchDepartments,
     createDepartment,
     updateDepartment,
@@ -79,6 +80,8 @@ export default function AdminDashboard() {
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const HISTORY_PAGE_SIZE = 25;
+
+  const [purposeCategories, setPurposeCategories] = useState<{ category: string; count: number }[]>([]);
 
   // Department state
   const [departments, setDepartments] = useState<any[]>([]);
@@ -158,6 +161,12 @@ export default function AdminDashboard() {
       loadCustomerHistory(1);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'Reports' && orgId) {
+      fetchPurposeCategories(orgId).then(setPurposeCategories);
+    }
+  }, [activeTab, orgId]);
 
   if (loading || !currentUser || currentUser.role !== 'Organization Admin' || !orgId) {
     return (
@@ -531,7 +540,14 @@ export default function AdminDashboard() {
                             </span>
                             <div>
                               <span className="font-bold text-white block text-sm">{token.customerName}</span>
-                              <span className="text-[10px] text-zinc-500">{token.customerPhone} | Purpose: {token.purpose || 'General'}</span>
+                              <span className="text-[10px] text-zinc-500">
+                                {token.customerPhone} | Purpose: {token.purpose || 'General'}
+                                {token.purposeCategory && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-semibold">
+                                    {token.purposeCategory}
+                                  </span>
+                                )}
+                              </span>
                             </div>
                           </div>
                           <div className="text-right">
@@ -860,7 +876,14 @@ export default function AdminDashboard() {
                           <td className="p-4 font-extrabold text-indigo-400">{token.tokenNumber}</td>
                           <td className="p-4 font-semibold text-white">{token.customerName}</td>
                           <td className="p-4 text-zinc-400">{token.customerPhone}</td>
-                          <td className="p-4 text-zinc-400">{token.purpose || '—'}</td>
+                          <td className="p-4 text-zinc-400">
+                            {token.purpose || '—'}
+                            {token.purposeCategory && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[9px] font-semibold">
+                                {token.purposeCategory}
+                              </span>
+                            )}
+                          </td>
                           <td className="p-4">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                               token.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
@@ -942,6 +965,43 @@ export default function AdminDashboard() {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="p-6 rounded-3xl glass-panel border border-white/5 space-y-4">
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-base">Top Visit Reasons</h4>
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[8px] font-bold text-indigo-400 uppercase tracking-wider">
+                  <Sparkles className="w-2.5 h-2.5" /> AI
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                Customer-entered visit reasons, automatically categorized by AI.
+              </p>
+              {purposeCategories.length === 0 ? (
+                <p className="text-xs text-zinc-500 py-6 text-center">
+                  No categorized data yet — this fills in automatically as customers book with a purpose of visit.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {(() => {
+                    const maxCount = Math.max(...purposeCategories.map(c => c.count), 1);
+                    return purposeCategories.map((cat, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="font-semibold text-white">{cat.category}</span>
+                          <span className="text-zinc-500">{cat.count}</span>
+                        </div>
+                        <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+                            style={{ width: `${(cat.count / maxCount) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="p-6 rounded-3xl glass-panel border border-white/5 text-sm text-zinc-400">
