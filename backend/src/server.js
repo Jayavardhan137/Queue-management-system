@@ -888,7 +888,7 @@ app.get('/api/public/organizations/:orgId/departments', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT d.id, d.name, d.is_paused,
-              (SELECT COUNT(*) FROM queue_tokens WHERE department_id = d.id AND status = 'Waiting') as waiting_count
+              (SELECT COUNT(*) FROM queue_tokens WHERE department_id = d.id AND status = 'Waiting' AND created_at >= CURRENT_DATE) as waiting_count
        FROM departments d
        WHERE d.organization_id = $1
        ORDER BY d.created_at ASC`,
@@ -930,8 +930,8 @@ app.post('/api/public/organizations/:orgId/chat', chatLimiter, async (req, res) 
 
     const statsResult = await pool.query(
       `SELECT
-        (SELECT COUNT(*) FROM queue_tokens WHERE organization_id = $1 AND status = 'Waiting') as waiting,
-        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND status = 'Serving' LIMIT 1) as current_token`,
+        (SELECT COUNT(*) FROM queue_tokens WHERE organization_id = $1 AND status = 'Waiting' AND created_at >= CURRENT_DATE) as waiting,
+        (SELECT token_number FROM queue_tokens WHERE organization_id = $1 AND status = 'Serving' AND created_at >= CURRENT_DATE LIMIT 1) as current_token`,
       [orgId]
     );
     const stats = statsResult.rows[0];
@@ -1469,4 +1469,40 @@ async function notifyApproachingCustomers(client, orgId, deptId) {
 
 app.listen(PORT, () => {
   console.log(`QueueFlow AI API running on port ${PORT}`);
+
+  // Auto-expire stale Waiting tokens from previous days immediately on startup
+  expireStaleTokens();
+
+  // Then run again every day at midnight
+  const msUntilMidnight = () => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return midnight.getTime() - now.getTime();
+  };
+
+  const scheduleDailyExpiry = () => {
+    setTimeout(() => {
+      expireStaleTokens();
+      setInterval(expireStaleTokens, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight());
+  };
+
+  scheduleDailyExpiry();
 });
+
+async function expireStaleTokens() {
+  try {
+    const result = await pool.query(`
+      UPDATE queue_tokens
+      SET status = 'Expired', updated_at = NOW()
+      WHERE status = 'Waiting'
+      AND created_at < CURRENT_DATE
+    `);
+    if (result.rowCount > 0) {
+      console.log(`Auto-expired ${result.rowCount} stale Waiting token(s) from previous days.`);
+    }
+  } catch (err) {
+    console.error('Auto-expiry job failed:', err.message);
+  }
+}

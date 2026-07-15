@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 // ==========================================
 export type UserRole = 'Super Admin' | 'Organization Admin' | 'Staff';
 export type OrgStatus = 'Pending Verification' | 'Active' | 'Suspended' | 'Rejected';
-export type TokenStatus = 'Waiting' | 'Serving' | 'Completed' | 'Skipped' | 'Cancelled';
+export type TokenStatus = 'Waiting' | 'Serving' | 'Completed' | 'Skipped' | 'Cancelled' | 'Expired';
 
 export interface User {
   id: string;

@@ -830,6 +830,7 @@ export default function AdminDashboard() {
                   <option value="Completed" className="bg-[#121212] text-white">Completed</option>
                   <option value="Skipped" className="bg-[#121212] text-white">Skipped</option>
                   <option value="Cancelled" className="bg-[#121212] text-white">Cancelled</option>
+                  <option value="Expired" className="bg-[#121212] text-white">Expired</option>
                 </select>
               </div>
               <button
@@ -889,6 +890,7 @@ export default function AdminDashboard() {
                               token.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                               token.status === 'Skipped' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
                               token.status === 'Cancelled' ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' :
+                              token.status === 'Expired' ? 'bg-zinc-500/10 text-zinc-500 border-zinc-600/20' :
                               token.status === 'Serving' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                               'bg-amber-500/10 text-amber-400 border-amber-500/20'
                             }`}>
