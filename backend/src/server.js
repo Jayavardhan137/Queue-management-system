@@ -160,14 +160,15 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // Create organization with Pending Verification status
+      // Create organization with Pending Verification status and 30-day free trial
+      const trialExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const orgQuery = `
-        INSERT INTO organizations (name, business_type, owner_name, email, phone, business_address, status)
-        VALUES ($1, $2, $3, $4, $5, $6, 'Pending Verification')
+        INSERT INTO organizations (name, business_type, owner_name, email, phone, business_address, status, subscription_plan, payment_status, trial_status, subscription_expiry)
+        VALUES ($1, $2, $3, $4, $5, $6, 'Pending Verification', 'Free Trial', 'Unpaid', 'Active', $7)
         RETURNING *;
       `;
       const orgResult = await client.query(orgQuery, [
-        name, businessType, ownerName, email, phone, businessAddress
+        name, businessType, ownerName, email, phone, businessAddress, trialExpiry
       ]);
       const newOrg = orgResult.rows[0];
 
@@ -243,9 +244,9 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
-    // If Org Admin or Staff, check if organization is active
+    // If Org Admin or Staff, check organization status AND subscription
     if (user.role !== 'Super Admin') {
-      const orgQuery = 'SELECT status FROM organizations WHERE id = $1';
+      const orgQuery = 'SELECT * FROM organizations WHERE id = $1';
       const orgResult = await pool.query(orgQuery, [user.organization_id]);
       const org = orgResult.rows[0];
 
@@ -255,6 +256,25 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       }
       if (org.status === 'Suspended') {
         return res.status(403).json({ error: 'Organization account is suspended. Contact support.' });
+      }
+
+      // Check subscription/trial status
+      const now = new Date();
+      const expiry = org.subscription_expiry ? new Date(org.subscription_expiry) : null;
+      const isTrialActive = org.trial_status === 'Active' && expiry && expiry > now;
+      const isPaidActive = org.payment_status === 'Paid' && expiry && expiry > now;
+
+      if (!isTrialActive && !isPaidActive) {
+        // Allow login but flag as expired so frontend can redirect to payment
+        const payload = { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organization_id };
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+        return res.json({
+          token,
+          user: { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organization_id },
+          subscriptionExpired: true,
+          subscriptionPlan: org.subscription_plan,
+          subscriptionExpiry: org.subscription_expiry,
+        });
       }
     }
 
@@ -276,7 +296,8 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
         email: user.email,
         role: user.role,
         organizationId: user.organization_id
-      }
+      },
+      subscriptionExpired: false,
     });
   } catch (err) {
     console.error(err);

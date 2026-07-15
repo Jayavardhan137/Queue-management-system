@@ -266,6 +266,12 @@ export const QueueProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
       setCurrentUser(user);
       localStorage.setItem('qflow_user', JSON.stringify(user));
+
+      // If subscription/trial expired, redirect to payment instead of dashboard
+      if (data.subscriptionExpired) {
+        return { ok: true, subscriptionExpired: true, organizationId: data.user.organizationId };
+      }
+
       return { ok: true };
     } catch (e: any) {
       setError(e.message);

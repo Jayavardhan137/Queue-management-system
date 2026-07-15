@@ -33,6 +33,12 @@ export default function Login() {
     const result = await login(email, password);
 
     if (result.ok) {
+      // If subscription/trial expired, redirect to payment page instead of dashboard
+      if ((result as any).subscriptionExpired) {
+        router.push(`/payment?orgId=${(result as any).organizationId}&plan=Starter`);
+        return;
+      }
+
       // Re-read the saved user to decide where to route (role is set by the server)
       const saved = localStorage.getItem('qflow_user');
       const user = saved ? JSON.parse(saved) : null;

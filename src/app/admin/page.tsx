@@ -31,7 +31,8 @@ import {
   Plus,
   Trash2,
   Edit2,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -178,6 +179,15 @@ export default function AdminDashboard() {
 
   const waitingTokens = tokens.filter(t => t.status === 'Waiting').sort((a, b) => a.sequence - b.sequence);
   const servingToken = tokens.find(t => t.status === 'Serving');
+
+  // Trial/subscription status
+  const currentOrg = organizations.find(o => o.id === orgId);
+  const subscriptionExpiry = currentOrg?.subscriptionExpiry ? new Date(currentOrg.subscriptionExpiry) : null;
+  const daysRemaining = subscriptionExpiry
+    ? Math.max(0, Math.ceil((subscriptionExpiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+  const isOnTrial = currentOrg?.trialStatus === 'Active';
+  const showTrialBanner = isOnTrial && daysRemaining !== null && daysRemaining <= 7;
 
   const totalWaiting = dashboard?.waitingCustomers ?? waitingTokens.length;
   const totalCompleted = dashboard?.completedCustomers ?? 0;
@@ -374,6 +384,31 @@ export default function AdminDashboard() {
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto w-full max-w-7xl mx-auto space-y-8">
+
+        {/* Trial/Subscription warning banner */}
+        {showTrialBanner && (
+          <div className={`p-4 rounded-2xl flex items-center justify-between gap-4 border print:hidden ${
+            daysRemaining === 0
+              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+              : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <p className="text-xs font-semibold">
+                {daysRemaining === 0
+                  ? 'Your free trial has expired. Subscribe now to continue using your dashboard.'
+                  : `Your free trial expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}. Subscribe to keep access.`}
+              </p>
+            </div>
+            <button
+              onClick={() => router.push(`/payment?orgId=${orgId}&plan=Starter`)}
+              className="shrink-0 py-1.5 px-4 text-xs font-bold rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 cursor-pointer transition-colors whitespace-nowrap"
+            >
+              Subscribe Now
+            </button>
+          </div>
+        )}
+
         <div className="flex justify-between items-center print:hidden">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">
