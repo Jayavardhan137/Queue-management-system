@@ -40,9 +40,9 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // OpenRouter config — set OPENROUTER_API_KEY (and optionally OPENROUTER_MODEL) in env.
-// Model defaults to a fast, cheap Gemini model served through OpenRouter; override via env if you want a different one.
+// Model defaults to a fast, current Gemini model served through OpenRouter; override via env if you want a different one.
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-001';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Calls OpenRouter's OpenAI-compatible chat completions endpoint.
