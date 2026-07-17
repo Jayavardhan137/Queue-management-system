@@ -41,6 +41,7 @@ export default function AdminDashboard() {
     currentUser,
     loading,
     logout,
+    organizations,
     tokens,
     dashboard,
     settings,
@@ -66,6 +67,7 @@ export default function AdminDashboard() {
   const [profilePhone, setProfilePhone] = useState('');
   const [profileAddress, setProfileAddress] = useState('');
   const [profileLogo, setProfileLogo] = useState('🏥');
+  const [orgData, setOrgData] = useState<any>(null);
   const [avgService, setAvgService] = useState(15);
   const [isSaved, setIsSaved] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +114,7 @@ export default function AdminDashboard() {
     if (orgId) {
       fetchOwnOrgProfile(orgId).then(org => {
         if (org) {
+          setOrgData(org);
           setProfileName(org.name);
           setProfilePhone(org.phone);
           setProfileAddress(org.address);
