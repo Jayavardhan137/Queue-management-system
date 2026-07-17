@@ -360,7 +360,25 @@ export default function Home() {
             <p className="text-xs text-zinc-400">Scale queue desks and alert counts dynamically.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+            {/* Free Trial */}
+            <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col gap-4 relative">
+              <span className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded bg-emerald-500 text-[8px] font-bold text-black uppercase tracking-wider">No Card Needed</span>
+              <div>
+                <h4 className="font-bold text-sm text-white">Free Trial</h4>
+                <p className="text-[9px] text-zinc-500 mt-0.5">Try QueueFlow AI risk-free</p>
+              </div>
+              <p className="text-2xl font-extrabold text-emerald-400">$0<span className="text-xs text-zinc-500">/30 days</span></p>
+              <ul className="text-xs text-zinc-400 space-y-2 flex-1 border-t border-white/5 pt-3">
+                <li>• 1 Location QR Node</li>
+                <li>• Standard wait lists</li>
+                <li>• Full feature access for 30 days</li>
+              </ul>
+              <Link href="/register?plan=Free Trial" className="w-full text-center py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black transition-colors text-xs font-bold mt-2">
+                Start Free
+              </Link>
+            </div>
+
             {/* Starter */}
             <div className="p-6 rounded-2xl bg-white/5 border border-white/5 flex flex-col gap-4">
               <div>

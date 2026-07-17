@@ -54,9 +54,14 @@ function SuccessScreen() {
         </div>
         
         <div className="space-y-2">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Registration & Payment Complete!</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight text-white">
+            {org.subscriptionPlan === 'Free Trial' ? 'Registration Complete!' : 'Registration & Payment Complete!'}
+          </h2>
           <p className="text-sm text-zinc-400 max-w-md mx-auto leading-relaxed">
-            Thank you for registering <span className="text-white font-bold">{org.name}</span>. Your billing transaction was approved, and your tenant profile is set up.
+            Thank you for registering <span className="text-white font-bold">{org.name}</span>.
+            {org.subscriptionPlan === 'Free Trial'
+              ? ' Your 30-day free trial has started and your tenant profile is set up.'
+              : ' Your billing transaction was approved, and your tenant profile is set up.'}
           </p>
         </div>
 

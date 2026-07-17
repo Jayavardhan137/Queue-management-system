@@ -39,6 +39,7 @@ const BUSINESS_SECTORS = [
 const BUSINESS_TYPES = BUSINESS_SECTORS.map(s => s.name);
 
 const PLAN_DETAILS: Record<string, { name: string; price: string; features: string }> = {
+  'Free Trial': { name: 'Free Trial', price: '$0/30 days', features: '1 Location QR Node, Standard wait lists, Full feature access for 30 days, no card required' },
   Starter: { name: 'Starter Plan', price: '$29/mo', features: '1 Location QR Node, Standard wait lists, 1 Admin Seat' },
   Professional: { name: 'Professional Plan', price: '$79/mo', features: 'Unlimited QR Nodes, Automatic SMS triggers, Peak analytics, 14-day trial' },
   Enterprise: { name: 'Enterprise Plan', price: 'Custom Pricing', features: 'Consolidated multi-branch desks, Custom SMS Sender IDs, SLA guarantee' }
@@ -211,8 +212,13 @@ function RegisterForm() {
         return;
       }
 
-      // Redirect immediately to payment checkout flow
-      router.push(`/payment?orgId=${result.organization.id}&plan=${plan}`);
+      // The org is already created with a 30-day Free Trial by default (see backend).
+      // Only paid plans need to go through the payment checkout flow.
+      if (plan === 'Free Trial') {
+        router.push(`/register/success?orgId=${result.organization.id}`);
+      } else {
+        router.push(`/payment?orgId=${result.organization.id}&plan=${plan}`);
+      }
     } catch (err) {
       setError('An error occurred during registration. Please try again.');
     } finally {
