@@ -354,7 +354,7 @@ export default function Home() {
         </section>
 
         {/* Section 6: Licensing & Plans */}
-        <section className="p-6 md:p-8 rounded-3xl glass-panel border border-white/10 shadow-2xl space-y-6 bg-black/60 backdrop-blur-md">
+        <section id="pricing" className="p-6 md:p-8 rounded-3xl glass-panel border border-white/10 shadow-2xl space-y-6 bg-black/60 backdrop-blur-md">
           <div className="text-center max-w-xl mx-auto space-y-2">
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">SaaS Licensing Plans</h2>
             <p className="text-xs text-zinc-400">Scale queue desks and alert counts dynamically.</p>

@@ -251,7 +251,7 @@ function RegisterForm() {
             <h4 className="font-bold text-sm text-white">{selectedPlan.name} <span className="text-indigo-400 font-mono">({selectedPlan.price})</span></h4>
             <p className="text-[11px] text-zinc-400">{selectedPlan.features}</p>
           </div>
-          <Link href="/" className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 shrink-0">
+          <Link href="/#pricing" className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 shrink-0">
             Change Plan
           </Link>
         </div>
