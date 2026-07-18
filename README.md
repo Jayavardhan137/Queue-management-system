@@ -1,246 +1,343 @@
 # 🚀 QueueFlow AI
 
-> **A Smart QR-Based Queue Management SaaS Platform for Every Business**
+<div align="center">
 
-QueueFlow AI is a modern multi-tenant queue management system that helps organizations eliminate physical waiting lines. Customers simply scan a QR code, book a token, track their live queue position, and arrive only when it's their turn.
+### Smart AI-Powered Queue Management System
 
-The platform is designed for hospitals, banks, supermarkets, government offices, clinics, restaurants, universities, service centers, pharmacies, salons, and any business that manages customer queues.
+Reduce waiting times, eliminate physical queues, and improve customer experience through digital queue management.
 
----
-
-## ✨ Features
-
-### 🌐 Landing Page
-- Modern responsive UI
-- Premium SaaS design
-- Dark mode interface
-- Smooth animations
-- Mobile-friendly
-
-### 🏢 Organization Portal
-- Organization registration
-- Business document upload
-- Organization dashboard
-- Queue management interface
-- QR code generation (planned)
-- Reports & analytics
-
-### 👨‍💼 Super Admin Portal
-- View all registered organizations
-- Approve or reject registrations
-- Manage organizations
-- Platform analytics dashboard
-- Multi-tenant management
-
-### 👥 Customer Experience
-- Scan QR code
-- Book queue token
-- Live queue tracking
-- View people ahead
-- Estimated waiting time
-- Queue status updates
-
-### 🔔 Notification System (Planned)
-- SMS alerts
-- Push notifications
-- Real-time queue updates
-- Turn reminders
+</div>
 
 ---
 
-## 🏗️ System Workflow
+# 📌 Problem Statement
+
+Traditional queue systems suffer from several challenges:
+
+* Long waiting times
+* Overcrowding in service centers
+* Lack of real-time queue visibility
+* Customers missing their turns
+* Inefficient queue management processes
+* Poor customer experience
+
+---
+
+# 💡 Solution
+
+QueueFlow AI provides a smart digital queue management platform that enables organizations to manage queues efficiently while allowing customers to monitor their token status remotely.
+
+The platform combines:
+
+✅ QR-based token booking
+✅ Real-time queue tracking
+✅ SMS notifications
+✅ AI voice notifications
+✅ Online payments
+✅ Queue analytics
+
+---
+
+# 🌟 Features
+
+## 👤 Customer Features
+
+* Scan QR code to join a queue
+* Book tokens remotely
+* View live queue status
+* Track number of customers ahead
+* Receive SMS notifications
+* Receive AI voice reminders when only 5 customers are ahead
+* Online payment integration
+* Avoid standing in physical queues
+
+---
+
+## 🏢 Organization Features
+
+### Admin Dashboard
+
+* Create and manage queues
+* Generate organization QR codes
+* Monitor live token status
+* Configure estimated waiting time
+* Manage departments and counters
+* Track queue analytics
+* Notify customers automatically
+
+### Super Admin Dashboard
+
+* Manage organizations
+* Approve organization registrations
+* Subscription management
+* Platform analytics
+
+---
+
+# 🤖 AI Features
+
+## AI Voice Notification System
+
+QueueFlow AI includes an AI-powered voice assistant.
+
+When only **5 customers are ahead**, the system automatically notifies customers with a voice reminder.
+
+### Example:
+
+> "Hello, this is QueueFlow AI from ABC Hospital. There are only 5 customers ahead of you. Please be prepared for your turn."
+
+This helps:
+
+* Reduce missed turns
+* Improve customer preparedness
+* Decrease overcrowding
+* Improve service efficiency
+
+---
+
+# 🔔 Notification System
+
+Customers receive notifications when:
+
+✅ 5 customers are ahead
+✅ Their turn arrives
+✅ Their token is recalled
+
+Notifications are sent using:
+
+* SMS (Twilio)
+* AI Voice Notifications
+
+---
+
+# 🏗️ System Architecture
 
 ```text
-Organization Registers
-        │
-        ▼
-Uploads Verification Documents
-        │
-        ▼
-Pending Verification
-        │
-        ▼
-Super Admin Approval
-        │
-        ▼
-Organization Dashboard Activated
-        │
-        ▼
-Unique QR Code Generated
-        │
-        ▼
-Customer Scans QR Code
-        │
-        ▼
-Books Queue Token
-        │
-        ▼
-Live Queue Tracking
-        │
-        ▼
-Staff Manages Queue
-        │
-        ▼
-Customer Receives Notifications
+Customer
+     ↓
+QR Scan
+     ↓
+Book Token
+     ↓
+QueueFlow AI Platform
+     ↓
+Real-Time Queue Tracking
+     ↓
+SMS & AI Notifications
+     ↓
+Admin Dashboard
 ```
 
 ---
 
-## 🛠️ Tech Stack
+# 🛠️ Tech Stack
 
-### Frontend
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-- Framer Motion
-- Lucide React
+## Frontend
 
-### Backend (Architecture Designed)
-- Node.js
-- Express.js
-- PostgreSQL
-- JWT Authentication
-- bcrypt.js
-- REST API
+* Next.js
+* React.js
+* TypeScript
+* Tailwind CSS
+* Framer Motion
 
-### Deployment
-- Frontend: Vercel
-- Backend: Render (Planned)
-- Database: PostgreSQL (Planned)
+## Backend
+
+* Node.js
+* Express.js
+
+## Database
+
+* PostgreSQL
+* Supabase
+
+## Authentication
+
+* JWT Authentication
+
+## Integrations
+
+* Twilio (SMS Notifications)
+* Razorpay (Payment Gateway)
+* ElevenLabs (AI Voice Agent)
+* Gemini AI SDK
 
 ---
 
-## 📁 Project Structure
+# 📂 Project Structure
 
-```
-Queue-management-system/
+```bash
+QueueFlow-AI
 │
-├── backend/
-│   └── server.js
+├── backend
+│   ├── src
+│   ├── config
+│   ├── routes
+│   ├── controllers
 │
-├── database/
-│   └── schema.sql
+├── src
+│   ├── app
+│   ├── components
+│   ├── lib
 │
-├── public/
-│
-├── src/
-│
-├── package.json
-│
+├── public
+├── database
 └── README.md
 ```
 
 ---
 
-## 🚀 Getting Started
+# ⚙️ Installation
 
-Clone the repository:
-
-```bash
-git clone https://github.com/Jayavardhan137/Queue-management-system.git
-```
-
-Navigate to the project:
+## Clone Repository
 
 ```bash
-cd Queue-management-system
+git clone https://github.com/yourusername/QueueFlow-AI.git
+cd QueueFlow-AI
 ```
 
-Install dependencies:
+---
+
+## Install Frontend Dependencies
 
 ```bash
 npm install
 ```
 
-Start the development server:
+---
+
+## Install Backend Dependencies
+
+```bash
+cd backend
+npm install
+```
+
+---
+
+# 🔐 Environment Variables
+
+### Frontend
+
+```env
+NEXT_PUBLIC_API_URL=
+```
+
+### Backend
+
+```env
+DATABASE_URL=
+JWT_SECRET=
+
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+
+RAZORPAY_KEY_ID=
+RAZORPAY_SECRET=
+
+ELEVENLABS_API_KEY=
+ELEVENLABS_AGENT_ID=
+```
+
+---
+
+# ▶️ Run Locally
+
+## Frontend
 
 ```bash
 npm run dev
 ```
 
-Open:
+## Backend
 
+```bash
+cd backend
+npm start
 ```
-http://localhost:3000
-```
 
 ---
 
-## 📸 Screenshots
+# 📈 Revenue Model
 
-> Add screenshots of:
-- Landing Page
-- Organization Registration
-- Super Admin Dashboard
-- Organization Dashboard
-- Queue Tracking Page
+QueueFlow AI follows a SaaS business model.
 
----
+### Subscription Plans
 
-## 🎯 Future Enhancements
+* Basic Plan
+* Professional Plan
+* Enterprise Plan
 
-- QR Code generation for each department
-- Real-time queue synchronization
-- WhatsApp notifications
-- SMS integration
-- Email notifications
-- Razorpay subscription plans
-- AI-based waiting time prediction
-- Multi-branch organization support
-- Appointment scheduling
-- Analytics dashboard
-- Role-based staff accounts
-- Customer feedback system
-- Mobile application
+### Revenue Sources
+
+* Monthly subscriptions
+* Premium analytics
+* Enterprise integrations
+* White-label solutions
+* API usage plans
 
 ---
 
-## 💡 Problem Statement
+# 🎯 Target Industries
 
-Customers often spend hours waiting in physical queues at hospitals, banks, supermarkets, government offices, and other service centers.
-
-QueueFlow AI digitizes this entire process using QR codes, enabling customers to join a queue remotely, monitor their position in real time, and arrive only when their turn is near.
-
----
-
-## 🌍 Target Industries
-
-- 🏥 Hospitals & Clinics
-- 🏦 Banks
-- 🏛 Government Offices
-- 🛒 Supermarkets
-- 💊 Pharmacies
-- 🎓 Universities & Colleges
-- 🍽 Restaurants
-- 💇 Salons & Spas
-- 🚗 RTO Offices
-- 🛠 Service Centers
-- 📮 Post Offices
-- 🎟 Ticket Counters
+* Hospitals
+* Clinics
+* Banks
+* Government Offices
+* Supermarkets
+* Educational Institutions
+* Service Centers
+* Public Utility Centers
 
 ---
 
-## 👨‍💻 Developed By
+# 🔥 Future Scope
 
-**Jayavardhan Malamanti**
-
-B.Tech CSE (AI & ML)
-
-AMET University
-
----
-
-## 📜 License
-
-This project was developed for educational and hackathon purposes.
-
-Future commercial use may require additional licensing and integrations.
+* Conversational AI calling agent
+* Customer arrival prediction
+* Automatic queue rescheduling
+* Predictive wait-time estimation
+* AI queue optimization
+* Multi-language support
+* Mobile applications
+* Face recognition check-in
+* Staff performance analytics
+* Dynamic queue balancing
 
 ---
 
-⭐ If you like this project, consider giving it a star!
+# 🏆 Why QueueFlow AI?
 
+QueueFlow AI transforms traditional waiting systems into an intelligent digital experience.
 
+### Benefits
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+✅ Reduced waiting times
+✅ Better customer experience
+✅ Reduced overcrowding
+✅ Increased operational efficiency
+✅ Smart AI-powered notifications
+✅ Scalable for multiple industries
+
+---
+
+# 👨‍💻 Team
+
+Built with ❤️ for innovation and smart customer experiences.
+
+## Team Name
+
+**QueueFlow AI**
+
+## Vision
+
+> "Making waiting smarter, faster, and stress-free through technology and AI."
+
+---
+
+<div align="center">
+
+### ⭐ If you like this project, please give it a star!
+
+</div>
+
