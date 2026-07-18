@@ -48,6 +48,8 @@ export interface QueueToken {
   customerEmail?: string;
   purpose?: string;
   purposeCategory?: string;
+  agentCalled?: boolean;
+  agentCalledAt?: string;
   status: TokenStatus;
   sequence: number;
   createdAt: string;
@@ -198,6 +200,8 @@ const mapToken = (t: any): QueueToken => ({
   customerEmail: t.customer_email,
   purpose: t.purpose_of_visit,
   purposeCategory: t.purpose_category,
+  agentCalled: t.agent_called,
+  agentCalledAt: t.agent_called_at,
   status: t.status,
   sequence: t.sequence_number,
   createdAt: t.created_at,

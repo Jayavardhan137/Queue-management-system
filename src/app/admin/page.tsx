@@ -585,6 +585,11 @@ export default function AdminDashboard() {
                                     {token.purposeCategory}
                                   </span>
                                 )}
+                                {token.agentCalled && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 font-semibold flex-inline items-center gap-0.5">
+                                    📞 AI Called
+                                  </span>
+                                )}
                               </span>
                             </div>
                           </div>
@@ -920,6 +925,11 @@ export default function AdminDashboard() {
                             {token.purposeCategory && (
                               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[9px] font-semibold">
                                 {token.purposeCategory}
+                              </span>
+                            )}
+                            {token.agentCalled && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[9px] font-semibold">
+                                📞 AI Called
                               </span>
                             )}
                           </td>
